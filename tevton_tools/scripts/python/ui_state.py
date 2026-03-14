@@ -1,5 +1,4 @@
 from PySide6 import QtWidgets, QtCore
-from typing import Optional
 
 
 class UIStateController:

@@ -1,5 +1,4 @@
 import hou
-from datetime import datetime
 from pathlib import Path
 from PySide6 import QtCore, QtUiTools, QtWidgets, QtGui
 

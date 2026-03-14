@@ -275,17 +275,17 @@ def create_empty_hip(path, fps=24, start_frame=1001, end_frame=1120):
     hython_path = os.path.join(hou.getenv("HFS"), "bin", "hython")
 
     hy_script = f"""
-import hou
+    import hou
 
-hou.hipFile.clear(suppress_save_prompt=True)
+    hou.hipFile.clear(suppress_save_prompt=True)
 
-hou.setFps({fps})
-hou.playbar.setFrameRange({start_frame}, {end_frame})
-hou.playbar.setPlaybackRange({start_frame}, {end_frame})
-hou.setFrame({start_frame})
+    hou.setFps({fps})
+    hou.playbar.setFrameRange({start_frame}, {end_frame})
+    hou.playbar.setPlaybackRange({start_frame}, {end_frame})
+    hou.setFrame({start_frame})
 
-hou.hipFile.save(r"{path}")
-"""
+    hou.hipFile.save(r"{path}")
+    """
     with tempfile.NamedTemporaryFile(delete=False, suffix=".py") as tmp:
         tmp.write(hy_script.encode("utf-8"))
         tmp_path = tmp.name
