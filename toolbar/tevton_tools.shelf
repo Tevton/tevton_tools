@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<shelfDocument>
+  <!-- This file contains definitions of shelves, toolbars, and tools.
+ It should not be hand-edited when it is being used by the application.
+ Note, that two definitions of the same element are not allowed in
+ a single file. -->
+
+  <tool name="Creating Render nodes for selected Nodes" label="RENDER nodes setup" icon="hicon:/SVGIcons.index?ROP_usdrender.svg">
+    <toolMenuContext name="network">
+      <contextOpType>Sop/null</contextOpType>
+    </toolMenuContext>
+    <script scriptType="python"><![CDATA[from tools import render_nodes_setup
+
+render_nodes_setup.create_render_node_setup()]]></script>
+  </tool>
+
+  <tool name="Creating referenced sopimport nodes in Solaris for selected nodes" label="SOP nodes to Solaris" icon="hicon:/SVGIcons.index?LOP_sopimport.svg">
+    <script scriptType="python"><![CDATA[from tools import render_nodes_to_solaris
+
+render_nodes_to_solaris.translate_nodes_to_solaris()]]></script>
+  </tool>
+
+  <tool name="Reload Packages" label="Reload Packages" icon="$HOME/houdini21.0/config/Icons/hpaste-cloud-settings.svg">
+    <script scriptType="python"><![CDATA[from tvt_utils import reload_packages, reload_shelves
+
+reload_packages()
+reload_shelves()]]></script>
+  </tool>
+
+  <tool name="Project Manager" label="Project Manager" icon="hicon:/SVGIcons.index?TOP_sqloutput.svg">
+    <script scriptType="python"><![CDATA[from pipeline.project_manager import ProjectManager
+from pipeline.window_manager import WindowManager
+
+wm = WindowManager()
+
+wm.show_window(ProjectManager)]]></script>
+  </tool>
+
+  <toolshelf name="Tevton Tools" label="Tevton Tools">
+    <memberTool name="Creating Render nodes for selected Nodes"/>
+    <memberTool name="Creating referenced sopimport nodes in Solaris for selected nodes"/>
+    <memberTool name="Reload Packages"/>
+    <memberTool name="Project Manager"/>
+    <memberTool name="IncrementSame"/>
+  </toolshelf>
+</shelfDocument>
