@@ -1,0 +1,35 @@
+{
+    "python.defaultInterpreterPath": "D:/Programs/Houdini/Houdini21.0.559/python311/python.exe",
+    "python.analysis.extraPaths": [
+        "D:/Programs/Houdini/Houdini21.0.559/houdini/python3.11libs",
+        "D:/Programs/Houdini/Houdini21.0.559/python311/lib/site-packages",
+        "D:/Programs/Houdini/Houdini21.0.559/python311/lib/site-packages-forced",
+        "D:/Programs/Houdini/Houdini21.0.559/python311/lib/site-packages-ui-forced",
+        "D:/Programs/Houdini/Houdini21.0.559/packages/shotbuilder/python3.11libs",
+        "D:/Programs/Houdini/Houdini21.0.559/packages/kinefx/python3.11libs",
+        "D:/Programs/Houdini/Houdini21.0.559/packages/apex/python3.11libs",
+        "D:/Programs/Houdini/sidefx_packages/SideFXLabs21.0/scripts/python",
+        "C:/Users/stard/OneDrive/Documents/houdini21.0/python3.11libs",
+        "C:/Users/stard/OneDrive/Documents/houdini21.0/packages/axiom4.0.130/houdini/scripts/python",
+        "F:/Work/development/houdini/stubs",
+        "${workspaceFolder}/tevton_tools/scripts"
+    ],
+    "python.autoComplete.extraPaths": [
+        "D:/Programs/Houdini/Houdini21.0.559/houdini/python3.11libs",
+        "${workspaceFolder}/tevton_tools/scripts"
+    ],
+    "python.analysis.stubPath": "F:/Work/development/houdini/stubs",
+    "python.analysis.aiCodeActions": {
+        "implementAbstractClasses": true,
+        "generateSymbol": true,
+        "convertFormatString": true
+    },
+    "python.analysis.exclude": [
+        "**/AppData/**",
+        "**/node_modules",
+        "**/__pycache__",
+        ".git"
+    ],
+    "python.analysis.diagnosticSeverityOverrides": {},
+    "python.analysis.typeCheckingMode": "off"
+}

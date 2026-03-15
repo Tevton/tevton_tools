@@ -97,6 +97,11 @@ class UIStateController:
 
         self._active_blocks.add(block_id)
 
+    def block_group(self, block_id: str, group_name: str):
+        """Block only the widgets belonging to a specific group, saving their state."""
+        names = tuple(self._groups.get(group_name, []))
+        self.block(block_id, *names)
+
     def unblock(self, block_id: str):
         """Unblock widgets, restoring their previous states."""
         if block_id not in self._active_blocks:

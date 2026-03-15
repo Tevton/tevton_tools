@@ -1,4 +1,5 @@
 import os
+from pathlib import PureWindowsPath
 import queue
 import threading
 from PySide6 import QtCore
@@ -136,7 +137,7 @@ class FTPManager(QtCore.QObject):
         """Immediately abort any ongoing connection attempt."""
         if self._current_worker and self._current_worker.isRunning():
             if isinstance(self._current_worker, FTPConnectWorker):
-                self._current_worker.stop()   # closes socket → unblocks ftp.connect()
+                self._current_worker.stop()  # closes socket → unblocks ftp.connect()
                 self._current_worker.wait(500)
                 self._current_worker = None
                 self.busy_changed.emit(False)
@@ -167,7 +168,9 @@ class FTPManager(QtCore.QObject):
         if not self._guard_operation():
             return False
 
-        entries = _expand_paths(local_paths, remote_dir)
+        # Convert if win path
+        remote_dir_path = PureWindowsPath(remote_dir).as_posix()
+        entries = _expand_paths(local_paths, remote_dir_path)
         if not entries:
             self.status.emit("warning", "No valid files to upload.")
             return False
@@ -243,7 +246,9 @@ class FTPManager(QtCore.QObject):
         if hasattr(self._current_worker, "set_overwrite"):
             self._current_worker.set_overwrite(confirmed)
 
-    def rename_file(self, old_path: str, new_path: str, callback: Callable = None) -> bool:
+    def rename_file(
+        self, old_path: str, new_path: str, callback: Callable = None
+    ) -> bool:
         if not self._guard_operation():
             return False
 
@@ -308,7 +313,11 @@ class FTPManager(QtCore.QObject):
     def _on_operation_finished(self, success: bool, message: str, worker=None):
         """Completion handler for file operation workers."""
         if worker is not None and worker is not self._current_worker:
-            return  # Stale signal from cancelled worker
+            # A new worker was already started inside an operation_finished handler
+            # (e.g. sequential move queue). Emit the result but don't clear
+            # _current_worker or emit busy_changed(False) — the new worker is active.
+            self.operation_finished.emit(success, message)
+            return
         self.operation_finished.emit(success, message)
         self._current_worker = None
         self._upload_queue = None

@@ -1,7 +1,7 @@
 import hou
 import os
 from pathlib import Path
-import pipeline.projects_store as projects_store
+import pipeline.projects_store as projects_store  # type: ignore
 
 
 def get_projects_data_path():

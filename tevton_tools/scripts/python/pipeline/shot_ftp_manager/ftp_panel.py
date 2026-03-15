@@ -67,28 +67,32 @@ class FTPPanel:
         self._apply_sort()
 
     def _apply_sort(self):
-        """Re-sort tree items in Python, always keeping '..' pinned at top."""
+        """Re-sort tree items in Python, keeping '..' pinned at top and dirs before files."""
         tree = self._win.ftp_tree
         parent_item = None
-        items = []
+        dirs = []
+        files = []
 
         for i in range(tree.topLevelItemCount()):
             item = tree.topLevelItem(i)
             info = item.data(0, QtCore.Qt.UserRole) or {}
             if info.get("is_parent"):
                 parent_item = item
+            elif info.get("is_dir", False):
+                dirs.append(item)
             else:
-                items.append(item)
+                files.append(item)
 
         col = self._sort_column
-        items.sort(
-            key=lambda it: it.text(col).lower(), reverse=not self._sort_ascending
-        )
+        rev = not self._sort_ascending
+        dirs.sort(key=lambda it: it.text(col).lower(), reverse=rev)
+        files.sort(key=lambda it: it.text(col).lower(), reverse=rev)
 
-        tree.clear()
+        while tree.topLevelItemCount():
+            tree.takeTopLevelItem(0)
         if parent_item:
             tree.addTopLevelItem(parent_item)
-        for item in items:
+        for item in dirs + files:
             tree.addTopLevelItem(item)
 
     # ------------------------------------------------------------------
@@ -121,29 +125,6 @@ class FTPPanel:
         tree.setSortingEnabled(False)
         tree.clear()
         self.clear_selection()
-
-        at_root = self._path.rstrip("/") == "" or self._path == "/"
-
-        # Add parent directory item (..) unless already at filesystem root
-        if not at_root:
-            parent_path = "/".join(self._path.rstrip("/").split("/")[:-1]) or "/"
-            parent_item = QtWidgets.QTreeWidgetItem()
-            parent_item.setText(0, "..")
-            parent_item.setIcon(
-                0,
-                self._win.style().standardIcon(QtWidgets.QStyle.SP_DirIcon),
-            )
-            parent_item.setData(
-                0,
-                QtCore.Qt.UserRole,
-                {
-                    "name": "..",
-                    "path": parent_path,
-                    "is_dir": True,
-                    "is_parent": True,
-                },
-            )
-            tree.addTopLevelItem(parent_item)
 
         # Handle empty folder
         if not files_info:
@@ -192,7 +173,7 @@ class FTPPanel:
                 item = QtWidgets.QTreeWidgetItem()
                 item.setText(0, file_info.get("name", ""))
                 item.setText(1, file_info.get("size_str", ""))
-                item.setText(2, file_info.get("modify_str", ""))
+                item.setText(2, "  " + file_info.get("modify_str", ""))
                 item.setData(0, QtCore.Qt.UserRole, file_info)
 
                 # Check if it's a directory
@@ -221,15 +202,6 @@ class FTPPanel:
         tree.resizeColumnToContents(1)
         tree.resizeColumnToContents(2)
 
-        # Restore sort indicator (setSortingEnabled(False) hides it)
-        order = (
-            QtCore.Qt.AscendingOrder
-            if self._sort_ascending
-            else QtCore.Qt.DescendingOrder
-        )
-        tree.header().setSortIndicatorShown(True)
-        tree.header().setSortIndicator(self._sort_column, order)
-
     # ------------------------------------------------------------------
     # Navigation
     # ------------------------------------------------------------------
@@ -244,10 +216,6 @@ class FTPPanel:
 
         file_info = item.data(0, QtCore.Qt.UserRole)
         if not file_info:
-            return
-
-        if file_info.get("is_parent"):
-            self.navigate_back()
             return
 
         if file_info.get("is_dir", False):
@@ -274,6 +242,7 @@ class FTPPanel:
         """Navigate to a specific FTP path."""
         self._path = path
         self._win.ftp_path_edit.setText(path)
+        self._win.log(f"FTP: {path}", "info")
         self.clear_selection()
 
         try:
@@ -322,20 +291,27 @@ class FTPPanel:
 
         self._renaming_item = item
         self._rename_old_path = info["path"]
+        # Disconnect to suppress the itemChanged signal fired by setFlags
+        self._win.ftp_tree.itemChanged.disconnect(self._win._on_ftp_item_changed)
         item.setFlags(item.flags() | QtCore.Qt.ItemIsEditable)
+        self._win.ftp_tree.itemChanged.connect(self._win._on_ftp_item_changed)
         tree.editItem(item, 0)
 
     def on_item_changed(self, item):
         """Handle inline rename completion for FTP items."""
-        if item is not self._renaming_item:
+        if item is None or item is not self._renaming_item:
             return
 
-        # Clear editable flag immediately to prevent re-entry
-        item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable)
-        self._renaming_item = None
-
+        # Capture and clear state before setFlags to prevent re-entrant calls
+        renaming_item = self._renaming_item
         old_path = self._rename_old_path
+        self._renaming_item = None
         self._rename_old_path = None
+
+        renaming_item.setFlags(renaming_item.flags() & ~QtCore.Qt.ItemIsEditable)
+
+        if old_path is None:
+            return
 
         new_name = item.text(0).strip()
         old_name = old_path.rstrip("/").split("/")[-1]

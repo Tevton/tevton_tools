@@ -300,7 +300,16 @@ class FTPDownloadWorker(BaseTransferWorker):
         except Exception:
             pass
 
-        # It's a directory — walk it recursively.
+        # ftp.size() failed — confirm it's truly a directory by trying cwd.
+        try:
+            ftp.cwd(remote_path)
+            ftp.cwd("/")  # restore to root
+        except Exception:
+            # Can't cd into it — treat as a file with unknown size.
+            entries.append((remote_path, local_base, 0))
+            return
+
+        # Confirmed directory — walk it recursively.
         dir_name = remote_path.rstrip("/").split("/")[-1]
         local_mirror = os.path.join(local_base, dir_name)
 
@@ -308,6 +317,11 @@ class FTPDownloadWorker(BaseTransferWorker):
             children = self._list_dir(ftp, remote_path)
         except Exception as e:
             self.log(f"Cannot list {remote_path}: {e}", "warning")
+            entries.append((remote_path, local_base, 0))
+            return
+
+        if not children:
+            entries.append((remote_path, local_base, 0))
             return
 
         for name, is_dir, size in children:

@@ -1,54 +1,480 @@
 import os
+import re as _re
+from pathlib import Path
 from typing import Optional
 from PySide6 import QtWidgets
 
+import tvt_utils
 from ftp.ftp_utils import format_size as _format_size
+
+# Names of the four operation buttons managed by the cancel/restore cycle.
+_TRANSFER_BTN_NAMES = [
+    "upload_renders_btn",
+    "upload_selected_btn",
+    "download_selected_btn",
+    "download_source_btn",
+]
 
 
 class TransferPanel:
     """
-    Manages file transfers (upload/download/cancel), folder creation, deletion,
-    and all progress/stats UI updates.
+    Owns all transfer logic for the Shot FTP Manager.
 
-    Holds a reference to the parent window for access to widgets and ftp_manager.
-    Does not inherit from Qt — purely a logic container.
+    Responsibilities:
+    - High-level operations: upload renders/selected, download selected/source
+    - Low-level helpers: start_upload / start_download / cancel
+    - Folder and file operations
+    - Progress/stats UI updates
+    - Cancel-button lifecycle and transfer-button blocking
     """
 
     def __init__(self, window):
         self._win = window
         self._wm = window._wm
-        self._active_btn: Optional[QtWidgets.QPushButton] = None
-        self._active_btn_original_text: str = ""
+        self._cancel_btns: list = []  # [(btn, original_text), ...]
         self._pending_completion = None
 
-    # ------------------------------------------------------------------
-    # Download
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────────────────────────────
+    # HIGH-LEVEL TRANSFER OPERATIONS
+    # ──────────────────────────────────────────────────────────────────────
 
-    def start_download(self, remote_paths: list, local_dir: str):
-        if not self._win.ftp_manager.is_connected():
-            self._win.log("Cannot download: not connected", "warning")
+    def paste(self, src_paths: list, src_type: str, dest: str):
+        """Paste clipboard into the destination panel.
+
+        Args:
+            src_paths: Files/folders to paste.
+            src_type: 'local' or 'ftp' — where the clipboard came from.
+            dest: 'local' or 'ftp' — where to paste.
+        """
+        win = self._win
+        if not src_paths:
             return
-        if self._win.ftp_manager.is_busy():
-            self._win.log("Cannot download: operation in progress", "warning")
+
+        if src_type == "local" and dest == "ftp":
+            if not win.ftp_manager.is_connected():
+                win.log("Cannot paste: FTP not connected", "warning")
+                return
+            if win.ftp_manager.is_busy():
+                win.log("Cannot paste: FTP busy", "warning")
+                return
+            win._ui_state.block_group("ftp_write", "ftp_write")
+            try:
+                self.start_upload(src_paths, win.current_ftp_path, "selected")
+            except RuntimeError:
+                win._ui_state.unblock("ftp_write")
+
+        elif src_type == "ftp" and dest == "local":
+            if not win.ftp_manager.is_connected():
+                win.log("Cannot paste: FTP not connected", "warning")
+                return
+            if win.ftp_manager.is_busy():
+                win.log("Cannot paste: FTP busy", "warning")
+                return
+            win._ui_state.block_group("ftp_write", "ftp_write")
+            try:
+                self.start_download(src_paths, win.current_local_path, "selected")
+            except RuntimeError:
+                win._ui_state.unblock("ftp_write")
+
+        elif src_type == "local" and dest == "local":
+            if not win.current_local_path:
+                win.log("Cannot paste: no local path set", "warning")
+                return
+            self._copy_local_to_local(src_paths, win.current_local_path)
+
+        elif src_type == "ftp" and dest == "ftp":
+            target_dir = win.current_ftp_path.rstrip("/")
+            to_move = [
+                p
+                for p in src_paths
+                if "/".join(p.rstrip("/").split("/")[:-1]) != target_dir
+            ]
+            if not to_move:
+                win.log("Files are already in this folder", "info")
+                return
+            if not win.ftp_manager.is_connected():
+                win.log("Cannot paste: FTP not connected", "warning")
+                return
+            if win.ftp_manager.is_busy():
+                win.log("Cannot paste: FTP busy", "warning")
+                return
+            win._ui_state.block_group("ftp_write", "ftp_write")
+            moves = [
+                (p, f"{target_dir}/{p.rstrip('/').split('/')[-1]}") for p in to_move
+            ]
+            win._start_ftp_moves(moves)
+
+    def _copy_local_to_local(self, src_paths: list, dest_dir: str):
+        """Copy local files/folders into dest_dir using shutil."""
+        import shutil as _shutil
+
+        errors = []
+        copied = 0
+        for src in src_paths:
+            name = os.path.basename(src.rstrip("/\\"))
+            dst = os.path.join(dest_dir, name)
+            if os.path.normpath(src) == os.path.normpath(dst):
+                self._win.log(
+                    f"Skipping: source equals destination ({name})", "warning"
+                )
+                continue
+            try:
+                if os.path.isdir(src):
+                    _shutil.copytree(src, dst, dirs_exist_ok=True)
+                else:
+                    _shutil.copy2(src, dst)
+                copied += 1
+            except Exception as e:
+                errors.append(f"{name}: {e}")
+        if errors:
+            self._win.log(f"Copy errors: {'; '.join(errors)}", "error")
+        elif copied:
+            self._win.log(f"✅ Copied {copied} item(s)", "success")
+
+    def start_upload_selected(self):
+        """Upload the currently selected local files/folders to the current FTP path."""
+        win = self._win
+        if not win.ftp_manager.is_connected():
+            win.log("Cannot upload: not connected", "warning")
             return
+        if win.ftp_manager.is_busy():
+            win.log("Cannot upload: operation in progress", "warning")
+            return
+        local_paths = win.local_panel.get_selected_paths() if win.local_panel else []
+        win._ui_state.block_group("ftp_write", "ftp_write")
+        try:
+            self.start_upload(local_paths, win.current_ftp_path, "selected")
+        except RuntimeError:
+            win._ui_state.unblock("ftp_write")
+
+    def start_upload_renders(self):
+        """Upload render folders from the local shot using the mode selected in the UI."""
+        win = self._win
+        local_render_path = Path(win.local_shot_path) / "render"
+        if not local_render_path.exists():
+            win.log(f"Render folder not found: {local_render_path}", "warning")
+            positive = self._wm.show_buttons_dialog(
+                win,
+                "Error",
+                f"Can't find local 'render' folder!\n\n"
+                f"Would you like to create 'render' folder inside: {win.local_shot_path}?\n\n",
+                buttons=[("Yes", True), ("No", False)],
+                icon=QtWidgets.QMessageBox.Critical,
+            )
+            if not positive:
+                win.log("User aborted operation", "error")
+                return
+            try:
+                local_render_path.mkdir()
+                win.log(f"Folder created: {local_render_path}", "success")
+                self._wm.show_buttons_dialog(
+                    win,
+                    "Success",
+                    "Folder successfuly created!\n\n"
+                    f"Path : {local_render_path}\n\n"
+                    "Expected structure: render/{render_name}/{version}/files",
+                    icon=QtWidgets.QMessageBox.Information,
+                )
+                return
+            except OSError as e:
+                self._wm.show_buttons_dialog(
+                    win,
+                    "Error",
+                    f"Error creating render folder!\nError : {e}",
+                    icon=QtWidgets.QMessageBox.Critical,
+                )
+                return
+
+        render_names = [d for d in local_render_path.iterdir() if d.is_dir()]
+        if not render_names:
+            self._wm.show_buttons_dialog(
+                win,
+                "Error",
+                "The 'render' folder contains no render subfolders.\n\n"
+                "Expected structure: render/{render_name}/{version}/files",
+                icon=QtWidgets.QMessageBox.Critical,
+            )
+            return
+
+        ftp_render_path = str(Path(win.shot_root_ftp_path) / "render")
+        mode = win.renders_op_mode.currentIndex()  # 0=latest, 1=all, 2=missing
+
+        add_paths = (
+            self._collect_add_files() if win.renders_app_add_files.isChecked() else []
+        )
+        if add_paths is None:
+            return  # user aborted
+
+        if mode in (0, 1):
+            win._ui_state.block_group("ftp_write", "ftp_write")
+        try:
+            if mode == 0:  # Keep Only Latest Version
+                uploads = []
+                for rn in render_names:
+                    versions = [d for d in rn.iterdir() if d.is_dir()]
+                    if not versions:
+                        win.log(f"No version folders in {rn.name}, skipping", "warning")
+                        continue
+                    best = tvt_utils.latest_version_dir(versions)
+                    uploads.append(([str(best)], str(Path(ftp_render_path) / rn.name)))
+
+                if not uploads:
+                    self._wm.show_buttons_dialog(
+                        win,
+                        "Error",
+                        "No files to upload!\n\n"
+                        "Expected structure: render/{render_name}/{version}/files",
+                        icon=QtWidgets.QMessageBox.Critical,
+                    )
+                    win._ui_state.unblock("ftp_write")
+                    return
+
+                if add_paths:
+                    uploads.append((add_paths, win.shot_root_ftp_path))
+                for local_paths, remote_dir in uploads:
+                    self.start_upload(local_paths, remote_dir, "renders")
+
+            elif mode == 1:  # Upload All Versions
+                uploads = [([str(local_render_path)], win.shot_root_ftp_path)]
+                if add_paths:
+                    uploads.append((add_paths, win.shot_root_ftp_path))
+                for local_paths, remote_dir in uploads:
+                    self.start_upload(local_paths, remote_dir, "renders")
+
+            elif (
+                mode == 2
+            ):  # Upload Only Missing — async listing, add_paths handled inside
+                self._start_upload_missing_renders(
+                    render_names, ftp_render_path, add_paths
+                )
+                return  # async; block/unblock handled inside _start_missing
+
+        except RuntimeError:
+            win._ui_state.unblock("ftp_write")
+
+    def start_download_selected(self):
+        """Download the currently selected FTP files/folders to the current local path."""
+        win = self._win
+        if not win.ftp_manager.is_connected():
+            win.log("Cannot download: not connected", "warning")
+            return
+        if win.ftp_manager.is_busy():
+            win.log("Cannot download: operation in progress", "warning")
+            return
+        ftp_paths = win.ftp_panel.get_selected_paths() if win.ftp_panel else []
+        win._ui_state.block_group("ftp_write", "ftp_write")
+        try:
+            self.start_download(ftp_paths, win.current_local_path, "selected")
+        except RuntimeError:
+            win._ui_state.unblock("ftp_write")
+
+    def start_download_source(self):
+        """Download the remote source folder for this shot to the local source folder."""
+        win = self._win
+        if not win.ftp_manager.is_connected():
+            win.log("Cannot download: not connected", "warning")
+            return
+        if win.ftp_manager.is_busy():
+            win.log("Cannot download: operation in progress", "warning")
+            return
+
+        local_path = Path(win.local_shot_path) / "source"
+        if not local_path.exists():
+            win.log(
+                f"Local source folder not found in: {win.local_shot_path}", "warning"
+            )
+            positive = self._wm.show_buttons_dialog(
+                win,
+                "Error",
+                f"Can't find local 'source' folder!\n\n"
+                f"Would you like to create 'source' folder inside {win.local_shot_path}?",
+                buttons=[("Yes", True), ("No", False)],
+                icon=QtWidgets.QMessageBox.Critical,
+            )
+            if not positive:
+                win.log("User aborted operation", "error")
+                return
+            try:
+                local_path.mkdir()
+            except OSError as e:
+                self._wm.show_buttons_dialog(
+                    win,
+                    "Error",
+                    f"Error creating source folder!\nError : {e}",
+                    icon=QtWidgets.QMessageBox.Critical,
+                )
+                return
+
+        win._ui_state.block_group("ftp_write", "ftp_write")
+
+        def on_list_result(files_info):
+            if files_info is not None:
+                win.log("Remote source folder found, starting download...", "info")
+                self.start_download(
+                    [win.current_ftp_source_path], str(local_path), "source"
+                )
+
+        def on_source_list_fail(success, message):
+            msg = message.lower()
+            if not success and ("list failed" in msg or "cannot access" in msg):
+                self._wm.show_buttons_dialog(
+                    win,
+                    "Error",
+                    f"Remote source folder does not exist:\n\n{win.current_ftp_source_path}\n\n"
+                    f"Please ask Svetlana about source files for {win.shot_name}.",
+                    icon=QtWidgets.QMessageBox.Critical,
+                )
+                win.log(
+                    f"Remote source folder not found: {win.current_ftp_source_path}",
+                    "error",
+                )
+
+        self._wm.safe_connect_once(
+            win.ftp_manager.operation_finished, on_source_list_fail, win
+        )
+        win._suppress_list_fail_dialog = True
+        win.ftp_manager.list_files(win.current_ftp_source_path, callback=on_list_result)
+
+    # ──────────────────────────────────────────────────────────────────────
+    # UPLOAD HELPERS
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _start_upload_missing_renders(self, render_names, ftp_render_path, add_paths):
+        """Mode 2: compare each local render name against FTP, upload only missing versions."""
+        win = self._win
+        pending = list(render_names)
+        upload_queue = []  # [(local_paths, remote_dir), ...]
+
+        def _start_missing(queue):
+            if not queue:
+                win.log("No missing render versions to upload", "info")
+                return
+            win._ui_state.block_group("ftp_write", "ftp_write")
+            for local_paths, remote_dir in queue:
+                self.start_upload(local_paths, remote_dir, "renders")
+            if add_paths:
+                self.start_upload(add_paths, win.current_ftp_path, "renders")
+
+        def check_next():
+            if not pending:
+                _start_missing(upload_queue)
+                return
+
+            rn = pending.pop(0)
+            local_versions = {d.name: d for d in rn.iterdir() if d.is_dir()}
+            ftp_rn_path = str(Path(ftp_render_path) / rn.name)
+            _handled = [False]
+
+            def on_list(files):
+                if _handled[0]:
+                    return
+                _handled[0] = True
+                ftp_versions = set()
+                for d in files:
+                    is_dir = d.get("is_dir", False)
+                    if isinstance(is_dir, str):
+                        is_dir = is_dir.lower() == "true"
+                    if is_dir:
+                        ftp_versions.add(d["name"])
+                for vname, vdir in local_versions.items():
+                    if vname not in ftp_versions:
+                        upload_queue.append(([str(vdir)], ftp_rn_path))
+                check_next()
+
+            def on_list_fail(success, message):
+                if _handled[0]:
+                    return
+                msg = message.lower()
+                if not success and ("cannot access" in msg or "list failed" in msg):
+                    _handled[0] = True
+                    for vdir in local_versions.values():
+                        upload_queue.append(([str(vdir)], ftp_rn_path))
+                    check_next()
+
+            self._wm.safe_connect_once(
+                win.ftp_manager.operation_finished, on_list_fail, win
+            )
+            win._suppress_list_fail_dialog = True
+            win.ftp_manager.list_files(ftp_rn_path, callback=on_list)
+
+        check_next()
+
+    def _collect_add_files(self) -> "list | None":
+        """Scan the shot root for the latest .nk and .mov files.
+
+        Returns:
+            List of path strings to upload, empty list if none found and user
+            chose to continue, or None if the user aborted the upload.
+        """
+        win = self._win
+        candidates = [
+            p
+            for p in Path(win.local_shot_path).iterdir()
+            if p.is_file() and p.suffix.lower() in (".nk", ".mov")
+        ]
+
+        def _pick_best(files):
+            v_files = [p for p in files if _re.search(r"v\d+$", p.stem, _re.IGNORECASE)]
+            pool = v_files if v_files else files
+            return max(pool, key=lambda p: tvt_utils.extract_trailing_version(p.stem))
+
+        nk_files = [p for p in candidates if p.suffix.lower() == ".nk"]
+        mov_files = [p for p in candidates if p.suffix.lower() == ".mov"]
+        latest = []
+        if nk_files:
+            latest.append(_pick_best(nk_files))
+        if mov_files:
+            latest.append(_pick_best(mov_files))
+
+        if not latest:
+            proceed = self._wm.show_buttons_dialog(
+                win,
+                "No .nk or .mov Files Found",
+                f"No .nk or .mov files were found in:\n{win.local_shot_path}\n\n"
+                "Continue uploading renders without them?",
+                buttons=[("Continue", True), ("Abort", False)],
+                icon=QtWidgets.QMessageBox.Warning,
+            )
+            if not proceed:
+                return None
+            return []
+
+        return [str(p) for p in latest]
+
+    # ──────────────────────────────────────────────────────────────────────
+    # LOW-LEVEL TRANSFER
+    # ──────────────────────────────────────────────────────────────────────
+
+    def start_download(self, remote_paths: list, local_dir: str, mode: str):
+        """Initiate an FTP download.
+
+        Args:
+            remote_paths: FTP paths to download.
+            local_dir: Local destination directory.
+            mode: 'selected' or 'source' — determines which button becomes Cancel.
+        """
         if not remote_paths:
             self._win.log("No FTP files or folders selected", "warning")
+            self._win._ui_state.unblock("ftp_write")
             return
 
         self._win.log(f"Downloading {len(remote_paths)} item(s)...", "transfer")
-        self._set_cancel_mode(self._win.download_selected_btn, "Cancel Download")
 
-        def on_download_complete(success, message):
+        if mode == "selected":
+            self._set_cancel_mode(self._win.download_selected_btn, "Cancel Download")
+        elif mode == "source":
+            self._set_cancel_mode(self._win.download_source_btn, "Cancel Download")
+
+        def on_complete(success, message):
             self._pending_completion = None
             if success:
-                self._win.log(f"✅ Download completed", "success")
+                self._win.log("✅ Download completed", "success")
             else:
                 self._win.log(f"Download finished: {message}", "info")
             self._win._safe_refresh_ftp()
 
         self._pending_completion = self._wm.safe_connect_once(
-            self._win.ftp_manager.operation_finished, on_download_complete, self._win
+            self._win.ftp_manager.operation_finished, on_complete, self._win
         )
 
         try:
@@ -57,11 +483,14 @@ class TransferPanel:
             self._win.log(f"Download error: {e}", "error")
             self.restore_button()
 
-    # ------------------------------------------------------------------
-    # Upload
-    # ------------------------------------------------------------------
+    def start_upload(self, local_paths: list, remote_dir: str, mode: str):
+        """Initiate an FTP upload.
 
-    def start_upload(self, local_paths: list, remote_dir: str):
+        Args:
+            local_paths: Local files/folders to upload.
+            remote_dir: FTP destination directory.
+            mode: 'selected' or 'renders' — determines which button becomes Cancel.
+        """
         if not self._win.ftp_manager.is_connected():
             self._win.log("Cannot upload: not connected", "warning")
             return
@@ -69,22 +498,23 @@ class TransferPanel:
             self._win.log("No local files or folders selected for upload", "warning")
             return
 
-        # Only switch button on first upload
         if not self._win.ftp_manager.is_uploading():
-            self._set_cancel_mode(self._win.upload_selected_btn, "Cancel Upload")
+            if mode == "selected":
+                self._set_cancel_mode(self._win.upload_selected_btn, "Cancel Upload")
+            if mode == "renders":
+                self._set_cancel_mode(self._win.upload_renders_btn, "Cancel Upload")
 
         file_count = len(local_paths)
 
-        def on_upload_complete(success, message):
+        def on_complete(success, message):
             self._pending_completion = None
             if success:
                 self._win.log(f"✅ Upload completed: {file_count} files", "success")
             else:
                 self._win.log(f"Upload finished: {message}", "info")
-            self._win._safe_refresh_ftp()
 
         self._pending_completion = self._wm.safe_connect_once(
-            self._win.ftp_manager.operation_finished, on_upload_complete, self._win
+            self._win.ftp_manager.operation_finished, on_complete, self._win
         )
 
         try:
@@ -93,12 +523,8 @@ class TransferPanel:
             self._win.log(f"Upload error: {e}", "error")
             self.restore_button()
 
-    # ------------------------------------------------------------------
-    # Cancel
-    # ------------------------------------------------------------------
-
     def cancel(self):
-        """Cancel the active transfer and restore the button."""
+        """Cancel the active transfer and restore all buttons to their original state."""
         if self._pending_completion is not None:
             try:
                 self._win.ftp_manager.operation_finished.disconnect(
@@ -111,11 +537,12 @@ class TransferPanel:
         self._win._safe_refresh_ftp()
         self.restore_button()
 
-    # ------------------------------------------------------------------
-    # Folder creation
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────────────────────────────
+    # FOLDER OPERATIONS
+    # ──────────────────────────────────────────────────────────────────────
 
     def create_ftp_folder(self, current_ftp_path: str):
+        """Prompt for a name and create a new folder on the FTP server."""
         if not self._win.ftp_manager.is_connected():
             self._win.log("Cannot create folder: not connected", "warning")
             return
@@ -128,14 +555,13 @@ class TransferPanel:
             title="Create FTP Folder",
             icon=QtWidgets.QMessageBox.Question,
         )
-
         if not folder_name:
             return
 
         folder_name = folder_name.replace(" ", "_")
         remote_path = f"{current_ftp_path}/{folder_name}".replace("//", "/")
-
         self._win.log(f"Creating folder: {remote_path}", "info")
+        self._win._ui_state.block_group("ftp_write", "ftp_write")
 
         def on_folder_created(success, message):
             if success:
@@ -147,14 +573,10 @@ class TransferPanel:
         self._wm.safe_connect_once(
             self._win.ftp_manager.operation_finished, on_folder_created, self._win
         )
-
         self._win.ftp_manager.create_directories([remote_path])
 
-    # ------------------------------------------------------------------
-    # Local folder creation
-    # ------------------------------------------------------------------
-
     def create_local_folder(self, current_local_path: str):
+        """Prompt for a name and create a new folder on the local filesystem."""
         if not current_local_path:
             self._win.log("Cannot create folder: no local path set", "warning")
             return
@@ -164,13 +586,11 @@ class TransferPanel:
             title="Create Local Folder",
             icon=QtWidgets.QMessageBox.Question,
         )
-
         if not folder_name:
             return
 
         folder_name = folder_name.replace(" ", "_")
         new_path = os.path.join(current_local_path, folder_name)
-
         try:
             os.makedirs(new_path, exist_ok=True)
             self._win.log(f"✅ Created local folder: {folder_name}", "success")
@@ -179,28 +599,30 @@ class TransferPanel:
         except Exception as e:
             self._win.log(f"❌ Failed to create folder: {e}", "error")
 
-    # ------------------------------------------------------------------
-    # Deletion (FTP + local)
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────────────────────────────
+    # FILE DELETION
+    # ──────────────────────────────────────────────────────────────────────
 
     def delete_selected(self, ftp_paths: list, local_paths: list):
+        """Delete selected FTP or local items, with confirmation dialogs."""
         if ftp_paths:
             names = "\n".join(p.split("/")[-1] for p in ftp_paths)
             confirm = self._wm.show_buttons_dialog(
                 self._win,
                 "Confirm FTP Delete",
-                f"Delete {len(ftp_paths)} item(s) from FTP server?\n\n{names}",
+                f"Delete {len(ftp_paths)} selected item(s) from FTP server?\n\n",
                 buttons=[("Delete", True), ("Cancel", False)],
                 icon=QtWidgets.QMessageBox.Warning,
             )
             if confirm:
+                self._win._ui_state.block_group("ftp_write", "ftp_write")
                 self._win.ftp_manager.delete_files(ftp_paths)
         elif local_paths:
             names = "\n".join(os.path.basename(p) for p in local_paths)
             confirm = self._wm.show_buttons_dialog(
                 self._win,
                 "Confirm Local Delete",
-                f"Permanently delete {len(local_paths)} local item(s)?\n\n{names}",
+                f"Permanently delete {len(local_paths)} selected local item(s)?\n\n",
                 buttons=[("Delete", True), ("Cancel", False)],
                 icon=QtWidgets.QMessageBox.Warning,
             )
@@ -209,9 +631,9 @@ class TransferPanel:
         else:
             self._win.log("No files selected for deletion", "warning")
 
-    # ------------------------------------------------------------------
-    # Progress & stats
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────────────────────────────
+    # PROGRESS & STATS
+    # ──────────────────────────────────────────────────────────────────────
 
     def on_progress(self, value: int):
         if self._win.progress_bar:
@@ -237,7 +659,7 @@ class TransferPanel:
             self.reset_ui()
 
     def poll_stats(self):
-        """Called by _stats_timer every 200ms to pull stats from the upload worker."""
+        """Called every 200 ms to pull real-time stats from the active transfer worker."""
         try:
             worker = self._win.ftp_manager._current_worker
             if worker is not None and hasattr(worker, "emit_stats_if_due"):
@@ -246,52 +668,84 @@ class TransferPanel:
             pass
 
     def reset_ui(self):
+        """Reset the progress bar and all status labels."""
         if self._win.progress_bar:
             self._win.progress_bar.setValue(0)
-        if self._win.speed_status:
-            self._win.speed_status.setText("")
-        if self._win.total_status:
-            self._win.total_status.setText("")
-        if self._win.eta_status:
-            self._win.eta_status.setText("")
+        for attr in ("speed_status", "total_status", "eta_status"):
+            lbl = getattr(self._win, attr, None)
+            if lbl:
+                lbl.setText("")
 
-    # ------------------------------------------------------------------
-    # Internal — cancel button lifecycle
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────────────────────────────
+    # BUTTON LIFECYCLE
+    # ──────────────────────────────────────────────────────────────────────
 
     def _set_cancel_mode(self, btn: Optional[QtWidgets.QPushButton], cancel_text: str):
+        """Change `btn` to a cancel button and disable all other transfer buttons."""
         if not btn:
             return
-        self._active_btn = btn
-        self._active_btn_original_text = btn.text()
+        self._cancel_btns.append((btn, btn.text()))
         btn.setText(cancel_text)
         try:
             btn.clicked.disconnect()
         except (RuntimeError, TypeError):
             pass
         btn.clicked.connect(self.cancel)
+        self._block_other_transfer_btns(btn)
 
     def restore_button(self):
-        """Restore the transfer button to its original state."""
-        btn = self._active_btn
-        if not btn:
+        """Restore the cancel button(s) to their original state and re-enable all transfer buttons."""
+        if not self._cancel_btns:
             return
-        btn.setText(self._active_btn_original_text)
-        try:
-            btn.clicked.disconnect()
-        except (RuntimeError, TypeError):
-            pass
-        if btn is self._win.download_selected_btn:
-            btn.clicked.connect(self._win._download_selected)
-        else:
-            btn.clicked.connect(self._win._upload_selected)
-        self._active_btn = None
-        self._active_btn_original_text = ""
+        for btn, original_text in self._cancel_btns:
+            btn.setText(original_text)
+            try:
+                btn.clicked.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            if btn is self._win.download_selected_btn:
+                btn.clicked.connect(self._win._download_selected)
+            elif btn is self._win.download_source_btn:
+                btn.clicked.connect(self._win._download_source)
+            elif btn is self._win.upload_renders_btn:
+                btn.clicked.connect(self._win._upload_renders)
+            elif btn is self._win.upload_selected_btn:
+                btn.clicked.connect(self._win._upload_selected)
+            else:
+                self._win.log(f"restore_button: unknown button {btn}", "warning")
+        self._cancel_btns.clear()
+        self._unblock_transfer_btns()
+
+    def _block_other_transfer_btns(self, active_btn: QtWidgets.QPushButton):
+        """Disable all transfer buttons except the one that is now a cancel button."""
+        for name in _TRANSFER_BTN_NAMES:
+            btn = getattr(self._win, name, None)
+            if btn and btn is not active_btn:
+                btn.setEnabled(False)
+
+    def _unblock_transfer_btns(self):
+        """Re-enable transfer buttons, respecting their parent QGroupBox checked state."""
+        win = self._win
+        btn_to_groupbox = {
+            "upload_renders_btn": "upload_renders_box",
+            "upload_selected_btn": "upload_selected_box",
+            "download_selected_btn": None,
+            "download_source_btn": None,
+        }
+        for btn_name, box_name in btn_to_groupbox.items():
+            btn = getattr(win, btn_name, None)
+            if btn is None:
+                continue
+            if box_name is not None:
+                box = getattr(win, box_name, None)
+                if box is not None and not box.isChecked():
+                    continue  # leave disabled — parent groupbox is unchecked
+            btn.setEnabled(True)
 
 
-# ------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────────────
+# MODULE HELPERS
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def _format_eta(seconds: float) -> str:

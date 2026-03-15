@@ -304,6 +304,12 @@ class WindowManager:
             return False
         if msg_lower.startswith("deleted folder:"):
             return False
+        if message.startswith("✓ Listed"):
+            return False
+        if message.startswith("✓ Uploaded"):
+            return False
+        if message.startswith("✓ Renamed to:"):
+            return False
         return True
 
     def log(
@@ -338,8 +344,11 @@ class WindowManager:
         icon = self._log_levels.get(level, "•")
 
         try:
+            sb = log_widget.verticalScrollBar()
+            at_bottom = sb.value() >= sb.maximum() - 4
             log_widget.appendPlainText(f"{icon} [{timestamp}] {message}")
-            log_widget.ensureCursorVisible()
+            if at_bottom:
+                sb.setValue(sb.maximum())
         except RuntimeError:
             pass
 
