@@ -161,7 +161,9 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         self.log_text.setMaximumBlockCount(self.MAX_LOG_LINES)
         self.log_text.setReadOnly(True)
         self.log_text.document().setDocumentMargin(2)
-        self.con_status.setAlignment(QtCore.Qt.AlignCenter)
+        self.con_status.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
         for lbl in (
             self.ftp_text,
             self.local_text,
@@ -371,13 +373,17 @@ class ShotFTPManager(QtWidgets.QMainWindow):
                     raw = bytes(mime.data(FTP_MIME_TYPE)).decode("utf-8")
                     remote_paths = [p for p in raw.splitlines() if p]
                     if remote_paths and self.transfer_panel:
-                        index = self.local_tree.indexAt(event.pos())
+                        proxy_index = self.local_tree.indexAt(event.pos())
                         if (
-                            index.isValid()
+                            proxy_index.isValid()
                             and self.local_panel
+                            and self.local_panel._proxy
                             and self.local_panel.file_model
                         ):
-                            hit_path = self.local_panel.file_model.filePath(index)
+                            fm_index = self.local_panel._proxy.to_file_model_index(
+                                proxy_index
+                            )
+                            hit_path = self.local_panel.file_model.filePath(fm_index)
                             import os as _os
 
                             local_dir = (
@@ -398,9 +404,16 @@ class ShotFTPManager(QtWidgets.QMainWindow):
                         u.toLocalFile() for u in mime.urls() if u.isLocalFile()
                     ]
                     if src_paths and self.local_panel:
-                        index = self.local_tree.indexAt(event.pos())
-                        if index.isValid() and self.local_panel.file_model:
-                            hit = self.local_panel.file_model.filePath(index)
+                        proxy_index = self.local_tree.indexAt(event.pos())
+                        if (
+                            proxy_index.isValid()
+                            and self.local_panel._proxy
+                            and self.local_panel.file_model
+                        ):
+                            fm_index = self.local_panel._proxy.to_file_model_index(
+                                proxy_index
+                            )
+                            hit = self.local_panel.file_model.filePath(fm_index)
                             import os as _os
 
                             target_dir = (

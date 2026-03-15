@@ -173,7 +173,7 @@ class FTPPanel:
                 item = QtWidgets.QTreeWidgetItem()
                 item.setText(0, file_info.get("name", ""))
                 item.setText(1, file_info.get("size_str", ""))
-                item.setText(2, "  " + file_info.get("modify_str", ""))
+                item.setText(2, file_info.get("modify_str", ""))
                 item.setData(0, QtCore.Qt.UserRole, file_info)
 
                 # Check if it's a directory

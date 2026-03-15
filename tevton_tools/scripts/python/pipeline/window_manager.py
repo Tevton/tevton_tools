@@ -310,6 +310,8 @@ class WindowManager:
             return False
         if message.startswith("✓ Renamed to:"):
             return False
+        if message.startswith("✅ Folder created:"):
+            return False
         return True
 
     def log(
@@ -372,9 +374,9 @@ class WindowManager:
 
     def show_buttons_dialog(
         self,
-        parent,
-        title,
-        message,
+        parent=None,
+        title=None,
+        message="",
         buttons=None,
         font_size=8,
         icon=QtWidgets.QMessageBox.NoIcon,
@@ -491,7 +493,7 @@ class WindowManager:
 
     def show_folder_name_dialog(
         self,
-        parent,
+        parent=None,
         title="Create Folder",
         initial_text="",
         buttons=None,
