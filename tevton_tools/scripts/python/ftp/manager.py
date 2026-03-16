@@ -148,7 +148,8 @@ class FTPManager(QtCore.QObject):
     # File operations
     # ------------------------------------------------------------------
 
-    def list_files(self, path: str, callback: Callable = None) -> bool:
+    def list_files(self, path: str, callback: Callable = None,
+                   fail_callback: Callable = None) -> bool:
         if not self._guard_operation():
             return False
 
@@ -156,6 +157,8 @@ class FTPManager(QtCore.QObject):
         worker.files_ready.connect(self.files_ready)
         if callback:
             worker.files_ready.connect(callback)
+        if fail_callback:
+            worker.finished.connect(fail_callback)
         self._run_worker(worker)
         return True
 

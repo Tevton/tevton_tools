@@ -60,6 +60,7 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         # trigger the "create shot folder?" prompt.  Used to suppress the prompt
         # during background list checks (mode-2 renders, download-source probe).
         self._suppress_list_fail_dialog = False
+        self._suppress_op_finished = 0  # counter: >0 means suppress unblock/refresh
 
         self._connection_animation = tvt_utils.ConnectionAnimator(self)
         self._connection_animation.timeout_reached.connect(self._on_connection_timeout)
@@ -896,7 +897,11 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         Restores transfer buttons, unblocks navigation, and handles special
         failure cases (cancelled, list-failed → shot-folder prompt).
         """
-        if not self.ftp_manager.is_busy():
+        suppress = self._suppress_op_finished > 0
+        if suppress:
+            self._suppress_op_finished -= 1
+
+        if not suppress and not self.ftp_manager.is_busy():
             if self.transfer_panel:
                 try:
                     self.transfer_panel.restore_button()
@@ -911,9 +916,9 @@ class ShotFTPManager(QtWidgets.QMainWindow):
             return
 
         if not success and ("list failed" in msg_lower or "cannot access" in msg_lower):
-            suppress = self._suppress_list_fail_dialog
+            suppress_list = self._suppress_list_fail_dialog
             self._suppress_list_fail_dialog = False
-            if not suppress and self.ftp_panel:
+            if not suppress_list and self.ftp_panel:
                 try:
                     self.ftp_panel.prompt_create_shot_folder_if_at_base()
                 except RuntimeError:
@@ -923,7 +928,7 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         prefix = "✓" if success else "✗"
         self.log(f"{prefix} {message}", "success" if success else "error")
 
-        if success and any(k in msg_lower for k in ("upload", "delete")):
+        if not suppress and success and any(k in msg_lower for k in ("upload", "delete")):
             self._wm.safe_timer(self, self._safe_refresh_ftp, 200)
 
     def _on_overwrite_needed(self, conflict_names: list):

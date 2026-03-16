@@ -1,8 +1,7 @@
 import os
 import zipfile
-import shutil
 import re as _re
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Optional, List
 from PySide6 import QtWidgets
 
@@ -36,6 +35,7 @@ class TransferPanel:
         self._cancel_btns: list = []  # [(btn, original_text), ...]
         self.archive_name = ""
         self._pending_completion = None
+        self._render_upload_total = 0
 
     # ──────────────────────────────────────────────────────────────────────
     # HIGH-LEVEL TRANSFER OPERATIONS
@@ -215,7 +215,7 @@ class TransferPanel:
             win.log("Cannot upload: operation in progress", "warning")
             return
 
-        ftp_render_path = str(Path(win.shot_root_ftp_path) / "render")
+        ftp_render_path = str(PurePosixPath(win.shot_root_ftp_path) / "render")
         mode = win.renders_op_mode.currentIndex()  # 0=latest, 1=all, 2=missing
 
         add_paths = (
@@ -226,16 +226,25 @@ class TransferPanel:
 
         if mode in (0, 1):
             win._ui_state.block_group("ftp_write", "ftp_write")
+
+        # Shared callback for modes 0 and 1: uploads list is populated
+        # by the mode branch below, then _do_uploads runs after FTP delete.
+        uploads = []
+
+        def _do_uploads():
+            self._render_upload_total = 0
+            for local_paths, remote_dir in uploads:
+                self.start_upload(local_paths, remote_dir, "renders")
+
         try:
             if mode == 0:  # Keep Only Latest Version
-                uploads = []
                 for rn in render_names:
                     versions = [d for d in rn.iterdir() if d.is_dir()]
                     if not versions:
                         win.log(f"No version folders in {rn.name}, skipping", "warning")
                         continue
                     best = tvt_utils.latest_version_dir(versions)
-                    uploads.append(([str(best)], str(Path(ftp_render_path) / rn.name)))
+                    uploads.append(([str(best)], str(PurePosixPath(ftp_render_path) / rn.name)))
 
                 if not uploads:
                     self._wm.show_buttons_dialog(
@@ -250,21 +259,15 @@ class TransferPanel:
 
                 if add_paths:
                     uploads.append((add_paths, win.shot_root_ftp_path))
-                try:
-                    if Path(ftp_render_path).exists():
-                        shutil.rmtree(ftp_render_path)
-                except:
-                    pass
 
-                for local_paths, remote_dir in uploads:
-                    self.start_upload(local_paths, remote_dir, "renders")
+                self._delete_ftp_then([ftp_render_path], _do_uploads)
 
             elif mode == 1:  # Upload All Versions
-                uploads = [([str(local_render_path)], win.shot_root_ftp_path)]
+                uploads.append(([str(local_render_path)], win.shot_root_ftp_path))
                 if add_paths:
                     uploads.append((add_paths, win.shot_root_ftp_path))
-                for local_paths, remote_dir in uploads:
-                    self.start_upload(local_paths, remote_dir, "renders")
+
+                self._delete_ftp_then([ftp_render_path], _do_uploads)
 
             elif (
                 mode == 2
@@ -354,11 +357,11 @@ class TransferPanel:
                     "error",
                 )
 
-        self._wm.safe_connect_once(
-            win.ftp_manager.operation_finished, on_source_list_fail, win
-        )
         win._suppress_list_fail_dialog = True
-        win.ftp_manager.list_files(win.current_ftp_source_path, callback=on_list_result)
+        win.ftp_manager.list_files(
+            win.current_ftp_source_path, callback=on_list_result,
+            fail_callback=on_source_list_fail
+        )
 
     # ──────────────────────────────────────────────────────────────────────
     # UPLOAD HELPERS
@@ -371,14 +374,22 @@ class TransferPanel:
         upload_queue = []  # [(local_paths, remote_dir), ...]
 
         def _start_missing(queue):
-            if not queue:
-                win.log("No missing render versions to upload", "info")
-                return
-            win._ui_state.block_group("ftp_write", "ftp_write")
-            for local_paths, remote_dir in queue:
-                self.start_upload(local_paths, remote_dir, "renders")
-            if add_paths:
-                self.start_upload(add_paths, win.current_ftp_path, "renders")
+            def _do_upload():
+                if not queue and not add_paths:
+                    win.log("All render versions are up to date", "success")
+                    return
+                if not queue:
+                    win.log("All render versions are up to date", "success")
+                else:
+                    win.log(f"Uploading {len(queue)} missing render version(s)", "info")
+                self._render_upload_total = 0
+                win._ui_state.block_group("ftp_write", "ftp_write")
+                for local_paths, remote_dir in queue:
+                    self.start_upload(local_paths, remote_dir, "renders")
+                if add_paths:
+                    self.start_upload(add_paths, win.shot_root_ftp_path, "renders")
+
+            self._delete_ftp_then([], _do_upload)
 
         def check_next():
             if not pending:
@@ -387,40 +398,87 @@ class TransferPanel:
 
             rn = pending.pop(0)
             local_versions = {d.name: d for d in rn.iterdir() if d.is_dir()}
-            ftp_rn_path = str(Path(ftp_render_path) / rn.name)
+            ftp_rn_path = str(PurePosixPath(ftp_render_path) / rn.name)
             _handled = [False]
 
             def on_list(files):
                 if _handled[0]:
                     return
                 _handled[0] = True
-                ftp_versions = set()
+                ftp_versions = {}  # name → ftp_path
                 for d in files:
                     is_dir = d.get("is_dir", False)
                     if isinstance(is_dir, str):
                         is_dir = is_dir.lower() == "true"
                     if is_dir:
-                        ftp_versions.add(d["name"])
+                        ftp_versions[d["name"]] = d["path"]
+
+                # Versions not on FTP → upload entire folder
                 for vname, vdir in local_versions.items():
                     if vname not in ftp_versions:
                         upload_queue.append(([str(vdir)], ftp_rn_path))
-                check_next()
+
+                # Versions on both → compare files inside
+                versions_to_check = [
+                    (vname, vdir, ftp_versions[vname])
+                    for vname, vdir in local_versions.items()
+                    if vname in ftp_versions
+                ]
+                _check_version_files(versions_to_check)
+
+            def _check_version_files(versions_to_check):
+                """For versions on both sides, list FTP files and compare."""
+                if not versions_to_check:
+                    check_next()
+                    return
+
+                _vname, vdir, ftp_vpath = versions_to_check.pop(0)
+                local_files = {f.name for f in vdir.iterdir() if f.is_file()}
+                _vhandled = [False]
+
+                def on_vlist(files):
+                    if _vhandled[0]:
+                        return
+                    _vhandled[0] = True
+                    ftp_files = set()
+                    for f in files:
+                        is_dir = f.get("is_dir", False)
+                        if isinstance(is_dir, str):
+                            is_dir = is_dir.lower() == "true"
+                        if not is_dir:
+                            ftp_files.add(f["name"])
+                    if local_files - ftp_files:
+                        upload_queue.append(([str(vdir)], ftp_rn_path))
+                    _check_version_files(versions_to_check)
+
+                def on_vlist_fail(success, message):
+                    if _vhandled[0]:
+                        return
+                    if not success:
+                        _vhandled[0] = True
+                        upload_queue.append(([str(vdir)], ftp_rn_path))
+                        _check_version_files(versions_to_check)
+
+                win._suppress_list_fail_dialog = True
+                win._suppress_op_finished += 1
+                win.ftp_manager.list_files(
+                    ftp_vpath, callback=on_vlist, fail_callback=on_vlist_fail
+                )
 
             def on_list_fail(success, message):
                 if _handled[0]:
                     return
-                msg = message.lower()
-                if not success and ("cannot access" in msg or "list failed" in msg):
+                if not success:
                     _handled[0] = True
                     for vdir in local_versions.values():
                         upload_queue.append(([str(vdir)], ftp_rn_path))
                     check_next()
 
-            self._wm.safe_connect_once(
-                win.ftp_manager.operation_finished, on_list_fail, win
-            )
             win._suppress_list_fail_dialog = True
-            win.ftp_manager.list_files(ftp_rn_path, callback=on_list)
+            win._suppress_op_finished += 1
+            win.ftp_manager.list_files(
+                ftp_rn_path, callback=on_list, fail_callback=on_list_fail
+            )
 
         check_next()
 
@@ -439,39 +497,47 @@ class TransferPanel:
                 callback()
                 return
 
-            def on_delete_done(_success, _message):
-                callback()
+            names = [PurePosixPath(p).name for p in ftp_to_delete]
+            win.log(f"Deleting from FTP: {', '.join(names)}...", "info")
+            win._ui_state.block_group("ftp_write", "ftp_write")
+            win._suppress_op_finished += 1
 
-            self._wm.safe_connect_once(
-                win.ftp_manager.operation_finished, on_delete_done, win
-            )
-            win.ftp_manager.delete_files(ftp_to_delete)
+            def on_delete_done(_success, _message):
+                self._wm.safe_timer(win, callback, 0)
+
+            win.ftp_manager.delete_files(ftp_to_delete, callback=on_delete_done)
 
         def on_list(files):
             if _handled[0]:
                 return
             _handled[0] = True
+            existing_names = set()
             for f in files:
                 is_dir = f.get("is_dir", False)
                 if isinstance(is_dir, str):
                     is_dir = is_dir.lower() == "true"
                 if not is_dir and f["name"].lower().endswith((".mov", ".nk")):
                     ftp_to_delete.append(f["path"])
+                existing_names.add(f["name"])
+            # Keep only paths whose target actually exists on FTP
+            ftp_to_delete[:] = [
+                p for p in ftp_to_delete
+                if PurePosixPath(p).name in existing_names
+            ]
             _run_delete()
 
         def on_list_fail(success, message):
             if _handled[0]:
                 return
-            msg = message.lower()
-            if not success and ("cannot access" in msg or "list failed" in msg):
+            if not success:
                 _handled[0] = True
                 _run_delete()
 
-        self._wm.safe_connect_once(
-            win.ftp_manager.operation_finished, on_list_fail, win
-        )
         win._suppress_list_fail_dialog = True
-        win.ftp_manager.list_files(win.shot_root_ftp_path, callback=on_list)
+        win._suppress_op_finished += 1
+        win.ftp_manager.list_files(
+            win.shot_root_ftp_path, callback=on_list, fail_callback=on_list_fail
+        )
 
     def _collect_add_files(self) -> "list | None":
         """Scan the shot root for the latest .nk and .mov files.
@@ -571,42 +637,66 @@ class TransferPanel:
         if not local_paths:
             self._win.log("No local files or folders selected for upload", "warning")
             return
-        if not self._win.ftp_manager.is_uploading():
-            if mode == "selected":
-                self._set_cancel_mode(self._win.upload_selected_btn, "Cancel Upload")
-            if mode == "renders":
-                self._set_cancel_mode(self._win.upload_renders_btn, "Cancel Upload")
 
         # Mirroring structure in FTP
         remote_dir_path = PureWindowsPath(remote_dir).as_posix()
         entries = _expand_paths(local_paths, remote_dir_path)
         file_count = len(entries)
 
-        def on_complete(success, message):
-            self._pending_completion = None
-            if success:
-                self._win.log(f"✅ Upload completed: {file_count} files", "success")
-                if (
-                    self._win.del_up_zip.isChecked()
-                    and self._win.zip_up_files.isChecked()
-                ):
-                    try:
-                        archive_path = local_paths[0]
-                        archive_name = self.archive_name + ".zip"
-                        os.remove(archive_path)
-                        self._win.log(
-                            f"Archive {archive_name} successfully deleted", "success"
-                        )
-                    except Exception as e:
-                        self._win.log(
-                            f"Error when deleting {archive_name}: {e}", "error"
-                        )
-            else:
-                self._win.log(f"Upload finished: {message}", "info")
+        if mode == "renders":
+            self._render_upload_total += file_count
 
-        self._pending_completion = self._wm.safe_connect_once(
-            self._win.ftp_manager.operation_finished, on_complete, self._win
-        )
+        if not self._win.ftp_manager.is_uploading():
+            if mode == "selected":
+                self._set_cancel_mode(self._win.upload_selected_btn, "Cancel Upload")
+
+                def on_complete(success, message):
+                    self._pending_completion = None
+                    if success:
+                        self._win.log(
+                            f"Upload completed: {file_count} files", "success"
+                        )
+                        if (
+                            self._win.del_up_zip.isChecked()
+                            and self._win.zip_up_files.isChecked()
+                        ):
+                            try:
+                                archive_path = local_paths[0]
+                                archive_name = self.archive_name + ".zip"
+                                os.remove(archive_path)
+                                self._win.log(
+                                    f"Archive {archive_name} successfully deleted",
+                                    "success",
+                                )
+                            except Exception as e:
+                                self._win.log(
+                                    f"Error when deleting {archive_name}: {e}", "error"
+                                )
+                    else:
+                        self._win.log(f"Upload finished: {message}", "info")
+
+                self._pending_completion = self._wm.safe_connect_once(
+                    self._win.ftp_manager.operation_finished, on_complete, self._win
+                )
+
+            if mode == "renders":
+                self._set_cancel_mode(self._win.upload_renders_btn, "Cancel Upload")
+
+                def on_complete_renders(success, message):
+                    self._pending_completion = None
+                    total = self._render_upload_total
+                    self._render_upload_total = 0
+                    if success:
+                        self._win.log(
+                            f"Upload completed: {total} files", "success"
+                        )
+                    else:
+                        self._win.log(f"Upload finished: {message}", "info")
+
+                self._pending_completion = self._wm.safe_connect_once(
+                    self._win.ftp_manager.operation_finished,
+                    on_complete_renders, self._win
+                )
 
         try:
             self._win.ftp_manager.upload_files(entries)
