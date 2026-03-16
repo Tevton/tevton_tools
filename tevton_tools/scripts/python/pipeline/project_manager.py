@@ -401,7 +401,6 @@ class ProjectManager(QtWidgets.QMainWindow):
         cur_project_path = Path(project["JOB"])
 
         if not cur_project_path.exists():
-            self.shot_list.setEnabled(False)
             confirm = self._wm.show_buttons_dialog(
                 self,
                 "Missing Project",
