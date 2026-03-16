@@ -244,7 +244,9 @@ class TransferPanel:
                         win.log(f"No version folders in {rn.name}, skipping", "warning")
                         continue
                     best = tvt_utils.latest_version_dir(versions)
-                    uploads.append(([str(best)], str(PurePosixPath(ftp_render_path) / rn.name)))
+                    uploads.append(
+                        ([str(best)], str(PurePosixPath(ftp_render_path) / rn.name))
+                    )
 
                 if not uploads:
                     self._wm.show_buttons_dialog(
@@ -359,8 +361,9 @@ class TransferPanel:
 
         win._suppress_list_fail_dialog = True
         win.ftp_manager.list_files(
-            win.current_ftp_source_path, callback=on_list_result,
-            fail_callback=on_source_list_fail
+            win.current_ftp_source_path,
+            callback=on_list_result,
+            fail_callback=on_source_list_fail,
         )
 
     # ──────────────────────────────────────────────────────────────────────
@@ -521,8 +524,7 @@ class TransferPanel:
                 existing_names.add(f["name"])
             # Keep only paths whose target actually exists on FTP
             ftp_to_delete[:] = [
-                p for p in ftp_to_delete
-                if PurePosixPath(p).name in existing_names
+                p for p in ftp_to_delete if PurePosixPath(p).name in existing_names
             ]
             _run_delete()
 
@@ -599,11 +601,6 @@ class TransferPanel:
             return
 
         self._win.log(f"Downloading {len(remote_paths)} item(s)...", "transfer")
-
-        if mode == "selected":
-            self._set_cancel_mode(self._win.download_selected_btn, "Cancel Download")
-        elif mode == "source":
-            self._set_cancel_mode(self._win.download_source_btn, "Cancel Download")
 
         def on_complete(success, message):
             self._pending_completion = None
@@ -687,15 +684,14 @@ class TransferPanel:
                     total = self._render_upload_total
                     self._render_upload_total = 0
                     if success:
-                        self._win.log(
-                            f"Upload completed: {total} files", "success"
-                        )
+                        self._win.log(f"Upload completed: {total} files", "success")
                     else:
                         self._win.log(f"Upload finished: {message}", "info")
 
                 self._pending_completion = self._wm.safe_connect_once(
                     self._win.ftp_manager.operation_finished,
-                    on_complete_renders, self._win
+                    on_complete_renders,
+                    self._win,
                 )
 
         try:

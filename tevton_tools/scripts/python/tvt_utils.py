@@ -384,7 +384,7 @@ def latest_version_dir(dirs) -> "Path | None":
     dirs = list(dirs)
     if not dirs:
         return None
-    return max(dirs, key=lambda d: extract_trailing_version(d.name))
+    return max(dirs, key=lambda d: (extract_trailing_version(d.name), d.name))
 
 
 def latest_version_files(files) -> list:
