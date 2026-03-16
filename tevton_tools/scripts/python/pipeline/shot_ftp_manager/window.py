@@ -172,6 +172,9 @@ class ShotFTPManager(QtWidgets.QMainWindow):
             self.download_text,
             self.files_queue_text,
             self.status_text,
+            self.speed_status,
+            self.total_status,
+            self.eta_status,
         ):
             lbl.setAlignment(QtCore.Qt.AlignCenter)
         tvt_utils.set_connection_status(self, "disconnected")
@@ -437,7 +440,6 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         self._ui_state.register_many(
             {
                 "reconnect_btn": self.reconnect_btn,
-                "zip_selected_btn": self.zip_selected_btn,
                 "upload_renders_btn": self.upload_renders_btn,
                 "upload_selected_btn": self.upload_selected_btn,
                 "upload_renders_box": self.upload_renders_box,
@@ -456,6 +458,7 @@ class ShotFTPManager(QtWidgets.QMainWindow):
                 "ftp_path_edit": self.ftp_path_edit,
                 "new_folder_btn": self.new_folder_btn,
                 "delete_selected_btn": self.delete_selected_btn,
+                "zip_selected_btn": self.zip_selected_btn,
                 "local_back_btn": self.local_back_btn,
                 "local_path_edit": self.local_path_edit,
             },
@@ -506,6 +509,8 @@ class ShotFTPManager(QtWidgets.QMainWindow):
             self.new_folder_btn.clicked.connect(self._on_new_folder_clicked)
         if self.delete_selected_btn:
             self.delete_selected_btn.clicked.connect(self._delete_selected)
+        if self.zip_selected_btn:
+            self.zip_selected_btn.clicked.connect(self._zip_selected)
         if self.upload_renders_btn:
             self.upload_renders_btn.clicked.connect(self._upload_renders)
         if self.upload_renders_box and self.upload_selected_box:
@@ -774,6 +779,24 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         except RuntimeError:
             pass
 
+    def _zip_selected(self):
+        if not self.transfer_panel:
+            return
+        try:
+            local_paths = (
+                self.local_panel.get_selected_paths() if self.local_panel else []
+            )
+            archive_name = self._wm.show_input_field_dialog(
+                self,
+                "Create New Archive",
+                self.shot_name,
+                [("Create", True), ("Cancel", False)],
+                icon=QtWidgets.QMessageBox.Question,
+            )
+            self.transfer_panel.create_archive(local_paths, archive_name)
+        except RuntimeError:
+            pass
+
     def _copy_selected(self):
         try:
             ftp_paths = self.ftp_panel.get_selected_paths() if self.ftp_panel else []
@@ -873,13 +896,13 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         Restores transfer buttons, unblocks navigation, and handles special
         failure cases (cancelled, list-failed → shot-folder prompt).
         """
-        if self.transfer_panel:
-            try:
-                self.transfer_panel.restore_button()
-            except RuntimeError:
-                pass
-
-        self._ui_state.unblock("ftp_write")
+        if not self.ftp_manager.is_busy():
+            if self.transfer_panel:
+                try:
+                    self.transfer_panel.restore_button()
+                except RuntimeError:
+                    pass
+            self._ui_state.unblock("ftp_write")
 
         msg_lower = message.lower()
 
@@ -926,7 +949,7 @@ class ShotFTPManager(QtWidgets.QMainWindow):
     def _show_ftp_menu(self, tree, pos):
         item = tree.itemAt(pos)
         menu = QtWidgets.QMenu(tree)
-        menu.setFont(self._wm.menu_font())
+        menu.setFont(self._wm.menu_font(font_size=8))
         if item:
             info = item.data(0, QtCore.Qt.UserRole)
             if info and not info.get("is_parent"):
@@ -942,12 +965,13 @@ class ShotFTPManager(QtWidgets.QMainWindow):
     def _show_local_menu(self, tree, pos):
         index = tree.indexAt(pos)
         menu = QtWidgets.QMenu(tree)
-        menu.setFont(self._wm.menu_font())
+        menu.setFont(self._wm.menu_font(font_size=8))
         if index.isValid():
             menu.addAction("Upload").triggered.connect(self._upload_selected)
             menu.addAction("Copy").triggered.connect(self._copy_selected)
             menu.addAction("Rename").triggered.connect(self._rename_selected)
             menu.addAction("Delete").triggered.connect(self._delete_selected)
+            menu.addAction("Zip").triggered.connect(self._zip_selected)
             menu.addSeparator()
         menu.addAction("Paste here").triggered.connect(self._paste_to_local)
         menu.addAction("New Folder").triggered.connect(

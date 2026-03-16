@@ -228,7 +228,7 @@ class ProjectManager(QtWidgets.QMainWindow):
             self.file_list.clear()
             self._update_button_states()
         menu = QtWidgets.QMenu(self.project_list)
-        menu.setFont(self._wm.menu_font())
+        menu.setFont(self._wm.menu_font(font_size=8))
         menu.addAction("Create Project").triggered.connect(self.create_new_project)
         if item:
             menu.addSeparator()
@@ -253,7 +253,7 @@ class ProjectManager(QtWidgets.QMainWindow):
             self.load_file_list()
             self._update_button_states()
         menu = QtWidgets.QMenu(self.shot_list)
-        menu.setFont(self._wm.menu_font())
+        menu.setFont(self._wm.menu_font(font_size=8))
         menu.addAction("Create Shot").triggered.connect(self.create_new_shot)
         if item:
             menu.addSeparator()
@@ -278,7 +278,7 @@ class ProjectManager(QtWidgets.QMainWindow):
             )
             self._update_button_states()
         menu = QtWidgets.QMenu(self.file_list)
-        menu.setFont(self._wm.menu_font())
+        menu.setFont(self._wm.menu_font(font_size=8))
         menu.addAction("Create File").triggered.connect(self.create_new_file)
         if item:
             menu.addSeparator()

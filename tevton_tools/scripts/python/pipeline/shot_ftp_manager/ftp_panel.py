@@ -1,7 +1,12 @@
 import hou
-from PySide6 import QtCore, QtWidgets
-from config.config import FTP_SHOT_PATH
+from pathlib import Path
+from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6.QtWidgets import QFileIconProvider
+from PySide6.QtCore import QFileInfo
+from config.config import FTP_SHOT_PATH, USER_DATA_PATH
 from pipeline.window_manager import WindowManager
+
+_ICON_CACHE_DIR = Path(USER_DATA_PATH) / "cache" / "ftp_icons"
 
 
 class FTPPanel:
@@ -19,6 +24,15 @@ class FTPPanel:
         self._rename_old_path = None
         self._sort_column = 0
         self._sort_ascending = True
+        _ICON_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        self._icon_provider = QFileIconProvider()
+        self._icon_memory: dict = {}
+        self._icon_dir = self._load_or_fetch_icon(
+            "__dir__", lambda: self._icon_provider.icon(QFileIconProvider.Folder)
+        )
+        self._icon_file = self._load_or_fetch_icon(
+            "__file__", lambda: self._icon_provider.icon(QFileIconProvider.File)
+        )
         self._setup_header_sort()
 
     # ------------------------------------------------------------------
@@ -39,6 +53,37 @@ class FTPPanel:
     def _base_path(self) -> str:
         """Get base FTP path for this shot."""
         return FTP_SHOT_PATH.format(shot_name=self._win.shot_name)
+
+    # ------------------------------------------------------------------
+    # Icon helpers
+    # ------------------------------------------------------------------
+
+    def _load_or_fetch_icon(self, key: str, fetch_fn) -> QtGui.QIcon:
+        """Return icon for key: load from disk cache PNG if available, else query OS and save."""
+        cache_path = _ICON_CACHE_DIR / f"{key}.png"
+        if cache_path.exists():
+            icon = QtGui.QIcon(QtGui.QPixmap(str(cache_path)))
+            if not icon.isNull():
+                return icon
+        icon = fetch_fn()
+        if not icon.isNull():
+            pixmap = icon.pixmap(32, 32)
+            pixmap.save(str(cache_path), "PNG")
+        return icon
+
+    def _get_file_icon(self, name: str) -> QtGui.QIcon:
+        """Return a cached OS-native icon for the given filename (by extension)."""
+        ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+        if ext in self._icon_memory:
+            return self._icon_memory[ext]
+        key = ext if ext else "__noext__"
+        icon = self._load_or_fetch_icon(
+            key, lambda: self._icon_provider.icon(QFileInfo(f"dummy.{ext}" if ext else "dummy"))
+        )
+        if icon.isNull():
+            icon = self._icon_file
+        self._icon_memory[ext] = icon
+        return icon
 
     # ------------------------------------------------------------------
     # Header sort setup
@@ -169,6 +214,7 @@ class FTPPanel:
             # Combine: folders first, then files
             sorted_info = folders + files
 
+            items = []
             for file_info in sorted_info:
                 item = QtWidgets.QTreeWidgetItem()
                 item.setText(0, file_info.get("name", ""))
@@ -182,25 +228,20 @@ class FTPPanel:
                     is_dir = is_dir.lower() == "true"
 
                 if is_dir:
-                    item.setIcon(
-                        0, self._win.style().standardIcon(QtWidgets.QStyle.SP_DirIcon)
-                    )
+                    item.setIcon(0, self._icon_dir)
                     # Make folders bold
                     font = item.font(0)
                     font.setBold(True)
                     item.setFont(0, font)
                 else:
-                    item.setIcon(
-                        0, self._win.style().standardIcon(QtWidgets.QStyle.SP_FileIcon)
-                    )
+                    item.setIcon(0, self._get_file_icon(file_info.get("name", "")))
 
                 item.setTextAlignment(1, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
                 item.setTextAlignment(2, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-                tree.addTopLevelItem(item)
+                items.append(item)
 
-        # Resize columns to content
-        tree.resizeColumnToContents(1)
-        tree.resizeColumnToContents(2)
+            tree.addTopLevelItems(items)
+
 
     # ------------------------------------------------------------------
     # Navigation

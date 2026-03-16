@@ -1,5 +1,4 @@
 import os
-from pathlib import PureWindowsPath
 import queue
 import threading
 from PySide6 import QtCore
@@ -160,7 +159,7 @@ class FTPManager(QtCore.QObject):
         self._run_worker(worker)
         return True
 
-    def upload_files(self, local_paths: List[str], remote_dir: str) -> bool:
+    def upload_files(self, entries: List[str]) -> bool:
         """
         Upload files and/or folders to remote_dir, mirroring directory structure.
         If upload already in progress, adds items to the live queue instead.
@@ -168,9 +167,6 @@ class FTPManager(QtCore.QObject):
         if not self._guard_operation():
             return False
 
-        # Convert if win path
-        remote_dir_path = PureWindowsPath(remote_dir).as_posix()
-        entries = _expand_paths(local_paths, remote_dir_path)
         if not entries:
             self.status.emit("warning", "No valid files to upload.")
             return False
@@ -399,30 +395,3 @@ class FTPManager(QtCore.QObject):
         self.status.emit("info", msg)
         self._upload_done_event.set()
         return True
-
-
-# ------------------------------------------------------------------
-# Path helpers
-# ------------------------------------------------------------------
-
-
-def _expand_paths(local_paths: List[str], remote_dir: str) -> List[tuple]:
-    """
-    Expand a mixed list of files and directories into (local_file, remote_target_dir)
-    tuples, mirroring directory structure under remote_dir.
-    """
-    entries = []
-    remote_dir = remote_dir.rstrip("/")
-
-    for path in local_paths:
-        if os.path.isfile(path):
-            entries.append((path, remote_dir))
-        elif os.path.isdir(path):
-            base = os.path.dirname(path.rstrip("/\\"))
-            for root, _dirs, files in os.walk(path):
-                rel = os.path.relpath(root, base).replace("\\", "/")
-                target = f"{remote_dir}/{rel}".replace("//", "/")
-                for filename in files:
-                    entries.append((os.path.join(root, filename), target))
-
-    return entries

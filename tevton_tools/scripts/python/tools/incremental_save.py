@@ -38,8 +38,8 @@ def incremental_save():
 
     else:
         hou.ui.displayMessage(
-            f"Current file {filename} doesn't have numbers!\n"
-            "Please save current file with version definition",
+            f"Current file {filename} doesn't have numbers in name!\n"
+            "Please save current file with version definition!",
             severity=hou.severityType.Error,
             title="Error",
         )

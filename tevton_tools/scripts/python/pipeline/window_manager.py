@@ -1,9 +1,11 @@
 import hou
 import weakref
 from datetime import datetime
+from pathlib import Path
 from typing import Type, Optional, Dict, Any, Callable
 from PySide6 import QtCore, QtWidgets, QtGui
 from functools import wraps
+from config.config import USER_DATA_PATH
 
 
 class WindowManager:
@@ -53,6 +55,9 @@ class WindowManager:
         # =====================================================
         self._log_widgets: Dict[str, weakref.ref] = {}
         self._last_log: Dict[str, tuple] = {}  # window_id -> (message, level)
+        self._log_file = Path(USER_DATA_PATH) / "logs" / "tevton_tools.log"
+        if self._log_file.exists() and self._log_file.stat().st_size > 5 * 1024 * 1024:
+            self._log_file.unlink()
         self._log_levels = {
             "success": "✅",
             "error": "❌",
@@ -329,6 +334,7 @@ class WindowManager:
 
         if window_id not in self._log_widgets:
             print(f"[{level.upper()}] {message}")
+            self._write_to_log_file(f"[{level.upper()}] [{datetime.now().strftime('%H:%M:%S')}] {message}\n")
             return
 
         log_widget_ref = self._log_widgets[window_id]
@@ -352,6 +358,14 @@ class WindowManager:
             if at_bottom:
                 sb.setValue(sb.maximum())
         except RuntimeError:
+            pass
+        self._write_to_log_file(f"{icon} [{timestamp}] {message}\n")
+
+    def _write_to_log_file(self, line: str):
+        try:
+            with self._log_file.open("a", encoding="utf-8") as f:
+                f.write(line)
+        except OSError:
             pass
 
     def clear_logs(self, window):
@@ -491,10 +505,10 @@ class WindowManager:
 
         return dialog.exec_() == QtWidgets.QDialog.Accepted
 
-    def show_folder_name_dialog(
+    def show_input_field_dialog(
         self,
         parent=None,
-        title="Create Folder",
+        title="Create",
         initial_text="",
         buttons=None,
         font_size=8,
@@ -515,14 +529,14 @@ class WindowManager:
             icon: QMessageBox icon type
 
         Returns:
-            The folder name string if user clicked OK, None if cancelled
+            The field name string if user clicked OK, None if cancelled
 
         Example:
             # Standard usage
-            name = self.show_folder_name_dialog(parent, "New Folder")
+            name = self.input_field_dialog(parent, "New Folder")
 
             # Custom buttons
-            name = self.show_folder_name_dialog(
+            name = self.input_field_name_dialog(
                 parent,
                 "Save As",
                 buttons=[
@@ -602,7 +616,7 @@ class WindowManager:
             input_layout = QtWidgets.QVBoxLayout()
             input_layout.setSpacing(5)
 
-            label = QtWidgets.QLabel("Folder Name:")
+            label = QtWidgets.QLabel("Name:")
             label.setFont(font_amp)
             label.setAlignment(QtCore.Qt.AlignBottom)
             input_layout.addWidget(label)
@@ -619,7 +633,7 @@ class WindowManager:
             layout.addLayout(icon_layout)
 
         else:
-            label = QtWidgets.QLabel("Folder Name:")
+            label = QtWidgets.QLabel("Name:")
             label.setFont(font_amp)
             label.setAlignment(QtCore.Qt.AlignBottom)
             layout.addWidget(label)

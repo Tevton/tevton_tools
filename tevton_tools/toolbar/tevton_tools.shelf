@@ -41,6 +41,6 @@ wm.show_window(ProjectManager)]]></script>
     <memberTool name="Creating referenced sopimport nodes in Solaris for selected nodes"/>
     <memberTool name="Reload Packages"/>
     <memberTool name="Project Manager"/>
-    <memberTool name="IncrementSame"/>
+    <memberTool name="IncrementSave"/>
   </toolshelf>
 </shelfDocument>

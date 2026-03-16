@@ -1,7 +1,9 @@
 import os
+import zipfile
+import shutil
 import re as _re
-from pathlib import Path
-from typing import Optional
+from pathlib import Path, PureWindowsPath
+from typing import Optional, List
 from PySide6 import QtWidgets
 
 import tvt_utils
@@ -32,6 +34,7 @@ class TransferPanel:
         self._win = window
         self._wm = window._wm
         self._cancel_btns: list = []  # [(btn, original_text), ...]
+        self.archive_name = ""
         self._pending_completion = None
 
     # ──────────────────────────────────────────────────────────────────────
@@ -142,6 +145,15 @@ class TransferPanel:
             return
         local_paths = win.local_panel.get_selected_paths() if win.local_panel else []
         win._ui_state.block_group("ftp_write", "ftp_write")
+        if win.zip_up_files.isChecked():
+            archive_name = self._wm.show_input_field_dialog(
+                self._win,
+                title="Create Local Archive",
+                icon=QtWidgets.QMessageBox.Question,
+            )
+            if not archive_name:
+                return
+            local_paths = self.create_archive(local_paths, archive_name)
         try:
             self.start_upload(local_paths, win.current_ftp_path, "selected")
         except RuntimeError:
@@ -196,6 +208,13 @@ class TransferPanel:
             )
             return
 
+        if not win.ftp_manager.is_connected():
+            win.log("Cannot upload: not connected", "warning")
+            return
+        if win.ftp_manager.is_busy():
+            win.log("Cannot upload: operation in progress", "warning")
+            return
+
         ftp_render_path = str(Path(win.shot_root_ftp_path) / "render")
         mode = win.renders_op_mode.currentIndex()  # 0=latest, 1=all, 2=missing
 
@@ -231,6 +250,12 @@ class TransferPanel:
 
                 if add_paths:
                     uploads.append((add_paths, win.shot_root_ftp_path))
+                try:
+                    if Path(ftp_render_path).exists():
+                        shutil.rmtree(ftp_render_path)
+                except:
+                    pass
+
                 for local_paths, remote_dir in uploads:
                     self.start_upload(local_paths, remote_dir, "renders")
 
@@ -399,6 +424,55 @@ class TransferPanel:
 
         check_next()
 
+    def _delete_ftp_then(self, extra_ftp_paths: list, callback):
+        """List shot root for .mov/.nk files, delete them + extra_ftp_paths, then call callback().
+
+        If the shot root listing fails (folder doesn't exist yet), proceeds with
+        only extra_ftp_paths. If nothing needs deleting, calls callback() directly.
+        """
+        win = self._win
+        ftp_to_delete = list(extra_ftp_paths)
+        _handled = [False]
+
+        def _run_delete():
+            if not ftp_to_delete:
+                callback()
+                return
+
+            def on_delete_done(_success, _message):
+                callback()
+
+            self._wm.safe_connect_once(
+                win.ftp_manager.operation_finished, on_delete_done, win
+            )
+            win.ftp_manager.delete_files(ftp_to_delete)
+
+        def on_list(files):
+            if _handled[0]:
+                return
+            _handled[0] = True
+            for f in files:
+                is_dir = f.get("is_dir", False)
+                if isinstance(is_dir, str):
+                    is_dir = is_dir.lower() == "true"
+                if not is_dir and f["name"].lower().endswith((".mov", ".nk")):
+                    ftp_to_delete.append(f["path"])
+            _run_delete()
+
+        def on_list_fail(success, message):
+            if _handled[0]:
+                return
+            msg = message.lower()
+            if not success and ("cannot access" in msg or "list failed" in msg):
+                _handled[0] = True
+                _run_delete()
+
+        self._wm.safe_connect_once(
+            win.ftp_manager.operation_finished, on_list_fail, win
+        )
+        win._suppress_list_fail_dialog = True
+        win.ftp_manager.list_files(win.shot_root_ftp_path, callback=on_list)
+
     def _collect_add_files(self) -> "list | None":
         """Scan the shot root for the latest .nk and .mov files.
 
@@ -497,19 +571,36 @@ class TransferPanel:
         if not local_paths:
             self._win.log("No local files or folders selected for upload", "warning")
             return
-
         if not self._win.ftp_manager.is_uploading():
             if mode == "selected":
                 self._set_cancel_mode(self._win.upload_selected_btn, "Cancel Upload")
             if mode == "renders":
                 self._set_cancel_mode(self._win.upload_renders_btn, "Cancel Upload")
 
-        file_count = len(local_paths)
+        # Mirroring structure in FTP
+        remote_dir_path = PureWindowsPath(remote_dir).as_posix()
+        entries = _expand_paths(local_paths, remote_dir_path)
+        file_count = len(entries)
 
         def on_complete(success, message):
             self._pending_completion = None
             if success:
                 self._win.log(f"✅ Upload completed: {file_count} files", "success")
+                if (
+                    self._win.del_up_zip.isChecked()
+                    and self._win.zip_up_files.isChecked()
+                ):
+                    try:
+                        archive_path = local_paths[0]
+                        archive_name = self.archive_name + ".zip"
+                        os.remove(archive_path)
+                        self._win.log(
+                            f"Archive {archive_name} successfully deleted", "success"
+                        )
+                    except Exception as e:
+                        self._win.log(
+                            f"Error when deleting {archive_name}: {e}", "error"
+                        )
             else:
                 self._win.log(f"Upload finished: {message}", "info")
 
@@ -518,7 +609,7 @@ class TransferPanel:
         )
 
         try:
-            self._win.ftp_manager.upload_files(local_paths, remote_dir)
+            self._win.ftp_manager.upload_files(entries)
         except Exception as e:
             self._win.log(f"Upload error: {e}", "error")
             self.restore_button()
@@ -550,7 +641,7 @@ class TransferPanel:
             self._win.log("Cannot create folder: operation in progress", "warning")
             return
 
-        folder_name = self._wm.show_folder_name_dialog(
+        folder_name = self._wm.show_input_field_dialog(
             self._win,
             title="Create FTP Folder",
             icon=QtWidgets.QMessageBox.Question,
@@ -581,7 +672,7 @@ class TransferPanel:
             self._win.log("Cannot create folder: no local path set", "warning")
             return
 
-        folder_name = self._wm.show_folder_name_dialog(
+        folder_name = self._wm.show_input_field_dialog(
             self._win,
             title="Create Local Folder",
             icon=QtWidgets.QMessageBox.Question,
@@ -600,7 +691,7 @@ class TransferPanel:
             self._win.log(f"❌ Failed to create folder: {e}", "error")
 
     # ──────────────────────────────────────────────────────────────────────
-    # FILE DELETION
+    # FILE OPERATIONS
     # ──────────────────────────────────────────────────────────────────────
 
     def delete_selected(self, ftp_paths: list, local_paths: list):
@@ -630,6 +721,31 @@ class TransferPanel:
                 self._win.local_panel.delete_files(local_paths)
         else:
             self._win.log("No files selected for deletion", "warning")
+
+    def create_archive(self, local_paths: list, archive_name="archive"):
+
+        win = self._win
+        self.archive_name = archive_name
+        entries = _expand_paths(local_paths, "")
+
+        if not entries:
+            win.log("No files to archive", "warning")
+            return local_paths
+
+        archive_path = Path(win.local_shot_path) / f"{archive_name}.zip"
+
+        with zipfile.ZipFile(
+            archive_path, mode="w", compression=zipfile.ZIP_DEFLATED
+        ) as zf:
+            for local_file, _ in entries:
+                arc_path = os.path.relpath(local_file, win.local_shot_path)
+                zf.write(local_file, arcname=arc_path)
+
+        local_paths = []
+        local_paths.append(archive_path)
+        win.log(f"Archive {archive_name}.zip successfully created", "success")
+
+        return local_paths
 
     # ──────────────────────────────────────────────────────────────────────
     # PROGRESS & STATS
@@ -759,3 +875,25 @@ def _format_eta(seconds: float) -> str:
         return f"{m}m {s:02d}s"
     h, m = divmod(m, 60)
     return f"{h}h {m:02d}m"
+
+
+def _expand_paths(local_paths: List[str], remote_dir: str) -> List[tuple]:
+    """
+    Expand a mixed list of files and directories into (local_file, remote_target_dir)
+    tuples, mirroring directory structure under remote_dir.
+    """
+    entries = []
+    remote_dir = remote_dir.rstrip("/")
+
+    for path in local_paths:
+        if os.path.isfile(path):
+            entries.append((path, remote_dir))
+        elif os.path.isdir(path):
+            base = os.path.dirname(path.rstrip("/\\"))
+            for root, _dirs, files in os.walk(path):
+                rel = os.path.relpath(root, base).replace("\\", "/")
+                target = f"{remote_dir}/{rel}".replace("//", "/")
+                for filename in files:
+                    entries.append((os.path.join(root, filename), target))
+
+    return entries
