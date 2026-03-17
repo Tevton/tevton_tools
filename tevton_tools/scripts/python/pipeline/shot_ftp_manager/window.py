@@ -926,8 +926,9 @@ class ShotFTPManager(QtWidgets.QMainWindow):
                     pass
             return
 
-        prefix = "✓" if success else "✗"
-        self.log(f"{prefix} {message}", "success" if success else "error")
+        # Upload/download completions are logged by transfer_panel callbacks.
+        if not any(k in msg_lower for k in ("uploaded", "downloaded")):
+            self.log(message, "success" if success else "error")
 
         if (
             not suppress

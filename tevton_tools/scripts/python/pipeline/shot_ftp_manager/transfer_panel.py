@@ -473,7 +473,10 @@ class TransferPanel:
                 )
                 return
 
-        self._block_for_transfer()
+        self._block_for_other_op()
+        # Suppress the list worker's operation_finished so it doesn't re-enable
+        # the transfer buttons before the download worker takes over.
+        win._suppress_op_finished += 1
 
         def on_list_result(files_info):
             if files_info is not None:
@@ -483,15 +486,17 @@ class TransferPanel:
                 )
 
         def on_source_list_fail(success, message):
-            msg = message.lower()
-            if not success and ("list failed" in msg or "cannot access" in msg):
-                self._wm.show_buttons_dialog(
-                    win,
-                    "Error",
-                    f"Remote source folder does not exist:\n\n{win.current_ftp_source_path}\n\n"
-                    f"Please ask Svetlana about source files for {win.shot_name}.",
-                    icon=QtWidgets.QMessageBox.Critical,
-                )
+            if not success:
+                self._unblock_all()
+                msg = message.lower()
+                if "list failed" in msg or "cannot access" in msg:
+                    self._wm.show_buttons_dialog(
+                        win,
+                        "Error",
+                        f"Remote source folder does not exist:\n\n{win.current_ftp_source_path}\n\n"
+                        f"Please ask Svetlana about source files for {win.shot_name}.",
+                        icon=QtWidgets.QMessageBox.Critical,
+                    )
                 win.log(
                     f"Remote source folder not found: {win.current_ftp_source_path}",
                     "error",
@@ -754,9 +759,11 @@ class TransferPanel:
             self._queue_remove(op_id)
             self._active_op_id = ""
             if success:
-                self._win.log("✅ Download completed", "success")
+                # message is e.g. "Downloaded 9 files" — reformat to match upload style.
+                count = message.split()[1] if message else ""
+                self._win.log(f"Download completed: {count} files", "success")
             else:
-                self._win.log(f"Download finished: {message}", "info")
+                self._win.log(f"Download failed: {message}", "info")
             self._win._safe_refresh_ftp()
 
         self._wm.safe_connect_once(
