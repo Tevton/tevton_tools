@@ -104,13 +104,11 @@ class ShotFTPManager(QtWidgets.QMainWindow):
 
         # Upload renders section
         self.upload_text = f(QtWidgets.QLabel, "lb_upload_text")
-        self.upload_renders_box = f(QtWidgets.QGroupBox, "gb_upload_renders")
         self.upload_renders_btn = f(QtWidgets.QPushButton, "pb_renders_upload")
         self.renders_op_mode = f(QtWidgets.QComboBox, "qcb_renders_op_mode")
         self.renders_app_add_files = f(QtWidgets.QCheckBox, "cb_renders_app_add_files")
 
         # Upload selected section
-        self.upload_selected_box = f(QtWidgets.QGroupBox, "gb_upload_selected")
         self.upload_selected_btn = f(QtWidgets.QPushButton, "pb_upload_selected")
         self.zip_up_files = f(QtWidgets.QCheckBox, "cb_zip_up_files")
         self.del_up_zip = f(QtWidgets.QCheckBox, "cb_del_up_zip")
@@ -173,11 +171,18 @@ class ShotFTPManager(QtWidgets.QMainWindow):
             self.download_text,
             self.files_queue_text,
             self.status_text,
-            self.speed_status,
-            self.total_status,
-            self.eta_status,
         ):
             lbl.setAlignment(QtCore.Qt.AlignCenter)
+
+        self.speed_status.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
+        self.total_status.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
+        self.eta_status.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
         tvt_utils.set_connection_status(self, "disconnected")
         self.delshortcut = QtGui.QShortcut(QtGui.QKeySequence("Delete"), self)
         self.delshortcut.activated.connect(self._delete_selected)
@@ -298,7 +303,8 @@ class ShotFTPManager(QtWidgets.QMainWindow):
                                 if self.ftp_manager.is_busy():
                                     self.log("Cannot move: FTP busy", "warning")
                                 else:
-                                    self._ui_state.block_group("ftp_write", "ftp_write")
+                                    self._ui_state.disable_group("ftp_ops")
+                                    self._ui_state.disable_group("transfer")
                                     moves = [
                                         (
                                             p,
@@ -314,7 +320,7 @@ class ShotFTPManager(QtWidgets.QMainWindow):
                         u.toLocalFile() for u in mime.urls() if u.isLocalFile()
                     ]
                     if local_paths and self.transfer_panel:
-                        self._ui_state.block_group("ftp_write", "ftp_write")
+                        self._ui_state.disable_group("ftp_ops")
                         self.transfer_panel.start_upload(
                             local_paths, self.current_ftp_path, "selected"
                         )
@@ -397,7 +403,7 @@ class ShotFTPManager(QtWidgets.QMainWindow):
                             )
                         else:
                             local_dir = self.current_local_path
-                        self._ui_state.block_group("ftp_write", "ftp_write")
+                        self._ui_state.disable_group("ftp_ops")
                         self.transfer_panel.start_download(
                             remote_paths, local_dir, "selected"
                         )
@@ -437,37 +443,30 @@ class ShotFTPManager(QtWidgets.QMainWindow):
     # ──────────────────────────────────────────────────────────────────────
 
     def _register_widgets(self):
-        # Enabled/disabled by FTP connection state only.
-        self._ui_state.register_many(
-            {
-                "reconnect_btn": self.reconnect_btn,
-                "upload_renders_btn": self.upload_renders_btn,
-                "upload_selected_btn": self.upload_selected_btn,
-                "upload_renders_box": self.upload_renders_box,
-                "upload_selected_box": self.upload_selected_box,
-                "renders_op_mode": self.renders_op_mode,
-                "renders_app_add_files": self.renders_app_add_files,
-                "download_source_btn": self.download_source_btn,
-                "download_selected_btn": self.download_selected_btn,
-            },
-            groups=["operations"],
-        )
-        # Also blocked during active FTP write operations (navigation, folder ops).
-        self._ui_state.register_many(
-            {
-                "ftp_back_btn": self.ftp_back_btn,
-                "ftp_path_edit": self.ftp_path_edit,
-                "new_folder_btn": self.new_folder_btn,
-                "delete_selected_btn": self.delete_selected_btn,
-                "zip_selected_btn": self.zip_selected_btn,
-                "local_back_btn": self.local_back_btn,
-                "local_path_edit": self.local_path_edit,
-            },
-            groups=["operations", "ftp_write"],
-        )
-        self._ui_state.disable_group("operations")
-        if self.reconnect_btn:
-            self.reconnect_btn.setEnabled(True)
+        # Always-free: never touched by operation blocking.
+        self._ui_state.register_many({
+            "reconnect_btn":   self.reconnect_btn,
+            "local_tree":      self.local_tree,
+            "local_back_btn":  self.local_back_btn,
+            "local_path_edit": self.local_path_edit,
+        })
+        # Blocked during ANY FTP operation.
+        self._ui_state.register_many({
+            "ftp_back_btn":        self.ftp_back_btn,
+            "ftp_path_edit":       self.ftp_path_edit,
+            "new_folder_btn":      self.new_folder_btn,
+            "delete_selected_btn": self.delete_selected_btn,
+            "zip_selected_btn":    self.zip_selected_btn,
+        }, groups=["ftp_ops"])
+        # Blocked during non-transfer ops; managed individually during transfers.
+        self._ui_state.register_many({
+            "upload_renders_btn":    self.upload_renders_btn,
+            "upload_selected_btn":   self.upload_selected_btn,
+            "download_source_btn":   self.download_source_btn,
+            "download_selected_btn": self.download_selected_btn,
+        }, groups=["transfer"])
+        self._ui_state.disable_group("ftp_ops")
+        self._ui_state.disable_group("transfer")
 
     def _connect_ftp_signals_safe(self):
         self._wm.safe_connect(
@@ -514,28 +513,6 @@ class ShotFTPManager(QtWidgets.QMainWindow):
             self.zip_selected_btn.clicked.connect(self._zip_selected)
         if self.upload_renders_btn:
             self.upload_renders_btn.clicked.connect(self._upload_renders)
-        if self.upload_renders_box and self.upload_selected_box:
-            self.upload_renders_box.toggled.connect(
-                lambda checked: (
-                    self.upload_selected_box.setChecked(not checked)
-                    if checked
-                    else None
-                )
-            )
-            self.upload_selected_box.toggled.connect(
-                lambda checked: (
-                    self.upload_renders_box.setChecked(not checked) if checked else None
-                )
-            )
-        # Explicitly sync button enabled state with box checked state so that
-        # re-checking a box always re-enables its button, regardless of any
-        # direct setEnabled(False) calls made by _block_other_transfer_btns.
-        if self.upload_renders_box and self.upload_renders_btn:
-            self.upload_renders_box.toggled.connect(self.upload_renders_btn.setEnabled)
-        if self.upload_selected_box and self.upload_selected_btn:
-            self.upload_selected_box.toggled.connect(
-                self.upload_selected_btn.setEnabled
-            )
         if self.download_source_btn:
             self.download_source_btn.clicked.connect(self._download_source)
 
@@ -580,11 +557,13 @@ class ShotFTPManager(QtWidgets.QMainWindow):
     def _on_connection_changed(self, connected: bool):
         self._connection_animation.stop(success=connected)
         if connected:
-            self._ui_state.enable_group("operations")
+            self._ui_state.enable_group("ftp_ops")
+            self._ui_state.enable_group("transfer")
             self._wm.safe_timer(self, self._safe_refresh_ftp, 100)
         else:
             self.log("Disconnected", "warning")
-            self._ui_state.disable_group("operations")
+            self._ui_state.disable_group("ftp_ops")
+            self._ui_state.disable_group("transfer")
             if self.reconnect_btn:
                 self.reconnect_btn.setEnabled(True)
             if self.ftp_tree:
@@ -594,7 +573,8 @@ class ShotFTPManager(QtWidgets.QMainWindow):
                     pass
 
     def _on_connection_timeout(self):
-        self._ui_state.enable_group("operations")
+        self._ui_state.enable_group("ftp_ops")
+        self._ui_state.enable_group("transfer")
 
     # ──────────────────────────────────────────────────────────────────────
     # FTP NAVIGATION
@@ -723,11 +703,13 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         if not success:
             self.log(f"Move failed: {message}", "error")
             self._ftp_move_queue.clear()
-            self._ui_state.unblock("ftp_write")
+            self._ui_state.enable_group("ftp_ops")
+            self._ui_state.enable_group("transfer")
             self._wm.safe_timer(self, self._safe_refresh_ftp, 200)
             return
         if not self._ftp_move_queue:
-            self._ui_state.unblock("ftp_write")
+            self._ui_state.enable_group("ftp_ops")
+            self._ui_state.enable_group("transfer")
             self._wm.safe_timer(self, self._safe_refresh_ftp, 200)
             return
         old_path, new_path = self._ftp_move_queue.pop(0)
@@ -907,7 +889,8 @@ class ShotFTPManager(QtWidgets.QMainWindow):
                     self.transfer_panel.restore_button()
                 except RuntimeError:
                     pass
-            self._ui_state.unblock("ftp_write")
+            self._ui_state.enable_group("ftp_ops")
+            self._ui_state.enable_group("transfer")
 
         msg_lower = message.lower()
 
@@ -928,7 +911,11 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         prefix = "✓" if success else "✗"
         self.log(f"{prefix} {message}", "success" if success else "error")
 
-        if not suppress and success and any(k in msg_lower for k in ("upload", "delete")):
+        if (
+            not suppress
+            and success
+            and any(k in msg_lower for k in ("upload", "delete"))
+        ):
             self._wm.safe_timer(self, self._safe_refresh_ftp, 200)
 
     def _on_overwrite_needed(self, conflict_names: list):

@@ -37,6 +37,46 @@ class TransferPanel:
         self._pending_completion = None
         self._render_upload_total = 0
 
+    def _block_for_transfer(self):
+        """Block ftp_ops during a transfer; transfer buttons are managed via cancel-mode."""
+        self._win._ui_state.disable_group("ftp_ops")
+
+    def _block_for_other_op(self):
+        """Block both groups during a non-transfer FTP op (mkdir, delete, rename/move)."""
+        self._win._ui_state.disable_group("ftp_ops")
+        self._win._ui_state.disable_group("transfer")
+
+    def _unblock_all(self):
+        """Re-enable both groups after any operation (error paths / early returns)."""
+        self._win._ui_state.enable_group("ftp_ops")
+        self._win._ui_state.enable_group("transfer")
+
+    @staticmethod
+    def _set_cancel_btn_stylesheet(widget):
+        widget.setStyleSheet(
+            """
+        QPushButton {
+            background-color: #593131;
+            color: #e0e0e0;
+            border: 1px solid #3d2121;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        QPushButton:hover {
+            background-color: #7a4545;
+            color: #e0e0e0;
+            box-shadow: 0 2px 6px rgba(255, 100, 100, 0.4);
+        }
+        QPushButton:pressed {
+            background-color: #3d2121;
+            color: #e0e0e0;
+            box-shadow: inset 0 0 5px rgba(255, 200, 200, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
+            border: 2px solid #2d1818;
+            border-top-width: 3px;
+            border-bottom-width: 1px;
+        }
+        """
+        )
+
     # ──────────────────────────────────────────────────────────────────────
     # HIGH-LEVEL TRANSFER OPERATIONS
     # ──────────────────────────────────────────────────────────────────────
@@ -60,11 +100,11 @@ class TransferPanel:
             if win.ftp_manager.is_busy():
                 win.log("Cannot paste: FTP busy", "warning")
                 return
-            win._ui_state.block_group("ftp_write", "ftp_write")
+            self._block_for_transfer()
             try:
                 self.start_upload(src_paths, win.current_ftp_path, "selected")
             except RuntimeError:
-                win._ui_state.unblock("ftp_write")
+                self._unblock_all()
 
         elif src_type == "ftp" and dest == "local":
             if not win.ftp_manager.is_connected():
@@ -73,11 +113,11 @@ class TransferPanel:
             if win.ftp_manager.is_busy():
                 win.log("Cannot paste: FTP busy", "warning")
                 return
-            win._ui_state.block_group("ftp_write", "ftp_write")
+            self._block_for_transfer()
             try:
                 self.start_download(src_paths, win.current_local_path, "selected")
             except RuntimeError:
-                win._ui_state.unblock("ftp_write")
+                self._unblock_all()
 
         elif src_type == "local" and dest == "local":
             if not win.current_local_path:
@@ -101,7 +141,7 @@ class TransferPanel:
             if win.ftp_manager.is_busy():
                 win.log("Cannot paste: FTP busy", "warning")
                 return
-            win._ui_state.block_group("ftp_write", "ftp_write")
+            self._block_for_other_op()
             moves = [
                 (p, f"{target_dir}/{p.rstrip('/').split('/')[-1]}") for p in to_move
             ]
@@ -144,7 +184,7 @@ class TransferPanel:
             win.log("Cannot upload: operation in progress", "warning")
             return
         local_paths = win.local_panel.get_selected_paths() if win.local_panel else []
-        win._ui_state.block_group("ftp_write", "ftp_write")
+        self._block_for_transfer()
         if win.zip_up_files.isChecked():
             archive_name = self._wm.show_input_field_dialog(
                 self._win,
@@ -152,12 +192,13 @@ class TransferPanel:
                 icon=QtWidgets.QMessageBox.Question,
             )
             if not archive_name:
+                self._unblock_all()
                 return
             local_paths = self.create_archive(local_paths, archive_name)
         try:
             self.start_upload(local_paths, win.current_ftp_path, "selected")
         except RuntimeError:
-            win._ui_state.unblock("ftp_write")
+            self._unblock_all()
 
     def start_upload_renders(self):
         """Upload render folders from the local shot using the mode selected in the UI."""
@@ -225,7 +266,7 @@ class TransferPanel:
             return  # user aborted
 
         if mode in (0, 1):
-            win._ui_state.block_group("ftp_write", "ftp_write")
+            self._block_for_transfer()
 
         # Shared callback for modes 0 and 1: uploads list is populated
         # by the mode branch below, then _do_uploads runs after FTP delete.
@@ -256,7 +297,7 @@ class TransferPanel:
                         "Expected structure: render/{render_name}/{version}/files",
                         icon=QtWidgets.QMessageBox.Critical,
                     )
-                    win._ui_state.unblock("ftp_write")
+                    self._unblock_all()
                     return
 
                 if add_paths:
@@ -280,7 +321,7 @@ class TransferPanel:
                 return  # async; block/unblock handled inside _start_missing
 
         except RuntimeError:
-            win._ui_state.unblock("ftp_write")
+            self._unblock_all()
 
     def start_download_selected(self):
         """Download the currently selected FTP files/folders to the current local path."""
@@ -292,11 +333,11 @@ class TransferPanel:
             win.log("Cannot download: operation in progress", "warning")
             return
         ftp_paths = win.ftp_panel.get_selected_paths() if win.ftp_panel else []
-        win._ui_state.block_group("ftp_write", "ftp_write")
+        self._block_for_transfer()
         try:
             self.start_download(ftp_paths, win.current_local_path, "selected")
         except RuntimeError:
-            win._ui_state.unblock("ftp_write")
+            self._unblock_all()
 
     def start_download_source(self):
         """Download the remote source folder for this shot to the local source folder."""
@@ -335,7 +376,7 @@ class TransferPanel:
                 )
                 return
 
-        win._ui_state.block_group("ftp_write", "ftp_write")
+        self._block_for_transfer()
 
         def on_list_result(files_info):
             if files_info is not None:
@@ -386,7 +427,7 @@ class TransferPanel:
                 else:
                     win.log(f"Uploading {len(queue)} missing render version(s)", "info")
                 self._render_upload_total = 0
-                win._ui_state.block_group("ftp_write", "ftp_write")
+                self._block_for_transfer()
                 for local_paths, remote_dir in queue:
                     self.start_upload(local_paths, remote_dir, "renders")
                 if add_paths:
@@ -502,7 +543,7 @@ class TransferPanel:
 
             names = [PurePosixPath(p).name for p in ftp_to_delete]
             win.log(f"Deleting from FTP: {', '.join(names)}...", "info")
-            win._ui_state.block_group("ftp_write", "ftp_write")
+            self._block_for_other_op()
             win._suppress_op_finished += 1
 
             def on_delete_done(_success, _message):
@@ -597,9 +638,14 @@ class TransferPanel:
         """
         if not remote_paths:
             self._win.log("No FTP files or folders selected", "warning")
-            self._win._ui_state.unblock("ftp_write")
+            self._unblock_all()
             return
-
+        if mode == "selected":
+            self._set_cancel_mode(self._win.download_selected_btn, "Cancel Download")
+            self._set_cancel_btn_stylesheet(self._win.download_selected_btn)
+        if mode == "source":
+            self._set_cancel_mode(self._win.download_source_btn, "Cancel Download")
+            self._set_cancel_btn_stylesheet(self._win.download_source_btn)
         self._win.log(f"Downloading {len(remote_paths)} item(s)...", "transfer")
 
         def on_complete(success, message):
@@ -646,6 +692,7 @@ class TransferPanel:
         if not self._win.ftp_manager.is_uploading():
             if mode == "selected":
                 self._set_cancel_mode(self._win.upload_selected_btn, "Cancel Upload")
+                self._set_cancel_btn_stylesheet(self._win.upload_selected_btn)
 
                 def on_complete(success, message):
                     self._pending_completion = None
@@ -678,6 +725,7 @@ class TransferPanel:
 
             if mode == "renders":
                 self._set_cancel_mode(self._win.upload_renders_btn, "Cancel Upload")
+                self._set_cancel_btn_stylesheet(self._win.upload_renders_btn)
 
                 def on_complete_renders(success, message):
                     self._pending_completion = None
@@ -738,7 +786,7 @@ class TransferPanel:
         folder_name = folder_name.replace(" ", "_")
         remote_path = f"{current_ftp_path}/{folder_name}".replace("//", "/")
         self._win.log(f"Creating folder: {remote_path}", "info")
-        self._win._ui_state.block_group("ftp_write", "ftp_write")
+        self._block_for_other_op()
 
         def on_folder_created(success, message):
             if success:
@@ -783,7 +831,6 @@ class TransferPanel:
     def delete_selected(self, ftp_paths: list, local_paths: list):
         """Delete selected FTP or local items, with confirmation dialogs."""
         if ftp_paths:
-            names = "\n".join(p.split("/")[-1] for p in ftp_paths)
             confirm = self._wm.show_buttons_dialog(
                 self._win,
                 "Confirm FTP Delete",
@@ -792,10 +839,10 @@ class TransferPanel:
                 icon=QtWidgets.QMessageBox.Warning,
             )
             if confirm:
-                self._win._ui_state.block_group("ftp_write", "ftp_write")
+                self._block_for_other_op()
+                self._win.log(f"Deleting {len(ftp_paths)} items...", "info")
                 self._win.ftp_manager.delete_files(ftp_paths)
         elif local_paths:
-            names = "\n".join(os.path.basename(p) for p in local_paths)
             confirm = self._wm.show_buttons_dialog(
                 self._win,
                 "Confirm Local Delete",
@@ -804,6 +851,7 @@ class TransferPanel:
                 icon=QtWidgets.QMessageBox.Warning,
             )
             if confirm:
+                self._win.log(f"Deleting {len(ftp_paths)} items...", "info")
                 self._win.local_panel.delete_files(local_paths)
         else:
             self._win.log("No files selected for deletion", "warning")
@@ -893,10 +941,10 @@ class TransferPanel:
         except (RuntimeError, TypeError):
             pass
         btn.clicked.connect(self.cancel)
-        self._block_other_transfer_btns(btn)
+        self._unblock_transfer_btn(btn)
 
     def restore_button(self):
-        """Restore the cancel button(s) to their original state and re-enable all transfer buttons."""
+        """Restore the cancel button(s) to their original state."""
         if not self._cancel_btns:
             return
         for btn, original_text in self._cancel_btns:
@@ -907,42 +955,26 @@ class TransferPanel:
                 pass
             if btn is self._win.download_selected_btn:
                 btn.clicked.connect(self._win._download_selected)
+                self._win.download_selected_btn.setStyleSheet("")
             elif btn is self._win.download_source_btn:
                 btn.clicked.connect(self._win._download_source)
+                self._win.download_source_btn.setStyleSheet("")
             elif btn is self._win.upload_renders_btn:
                 btn.clicked.connect(self._win._upload_renders)
+                self._win.upload_renders_btn.setStyleSheet("")
             elif btn is self._win.upload_selected_btn:
                 btn.clicked.connect(self._win._upload_selected)
+                self._win.upload_selected_btn.setStyleSheet("")
             else:
                 self._win.log(f"restore_button: unknown button {btn}", "warning")
         self._cancel_btns.clear()
-        self._unblock_transfer_btns()
 
-    def _block_other_transfer_btns(self, active_btn: QtWidgets.QPushButton):
-        """Disable all transfer buttons except the one that is now a cancel button."""
+    def _unblock_transfer_btn(self, active_btn: QtWidgets.QPushButton):
+        """Enable only the active cancel button; disable all other transfer buttons."""
         for name in _TRANSFER_BTN_NAMES:
             btn = getattr(self._win, name, None)
-            if btn and btn is not active_btn:
-                btn.setEnabled(False)
-
-    def _unblock_transfer_btns(self):
-        """Re-enable transfer buttons, respecting their parent QGroupBox checked state."""
-        win = self._win
-        btn_to_groupbox = {
-            "upload_renders_btn": "upload_renders_box",
-            "upload_selected_btn": "upload_selected_box",
-            "download_selected_btn": None,
-            "download_source_btn": None,
-        }
-        for btn_name, box_name in btn_to_groupbox.items():
-            btn = getattr(win, btn_name, None)
-            if btn is None:
-                continue
-            if box_name is not None:
-                box = getattr(win, box_name, None)
-                if box is not None and not box.isChecked():
-                    continue  # leave disabled — parent groupbox is unchecked
-            btn.setEnabled(True)
+            if btn:
+                btn.setEnabled(btn is active_btn)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -43,4 +43,10 @@ wm.show_window(ProjectManager)]]></script>
     <memberTool name="Project Manager"/>
     <memberTool name="IncrementSave"/>
   </toolshelf>
+
+  <tool name="IncrementSave" label="Increment Save" icon="hicon:/SVGIcons.index?DESKTOP_file_sequence.svg">
+    <script scriptType="python"><![CDATA[from tools.incremental_save import incremental_save
+
+incremental_save()]]></script>
+  </tool>
 </shelfDocument>
