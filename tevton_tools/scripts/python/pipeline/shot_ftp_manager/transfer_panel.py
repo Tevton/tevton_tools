@@ -3,7 +3,7 @@ import zipfile
 import re as _re
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Optional, List
-from PySide6 import QtWidgets
+from PySide6 import QtWidgets, QtCore, QtGui
 
 import tvt_utils
 from ftp.ftp_utils import format_size as _format_size
@@ -15,6 +15,24 @@ _TRANSFER_BTN_NAMES = [
     "download_selected_btn",
     "download_source_btn",
 ]
+
+
+
+class _ProgressDelegate(QtWidgets.QStyledItemDelegate):
+    """Paints a translucent progress fill behind each files-queue item."""
+
+    def paint(self, painter, option, index):
+        progress = index.data(QtCore.Qt.ItemDataRole.UserRole) or 0
+        color = index.data(QtCore.Qt.ItemDataRole.UserRole + 1) or QtGui.QColor(60, 120, 60)
+        painter.save()
+        fill_w = int(option.rect.width() * progress / 100)
+        fill_rect = QtCore.QRect(option.rect).adjusted(0, 1, 0, -1)
+        fill_rect.setWidth(fill_w)
+        fill_color = QtGui.QColor(color)
+        fill_color.setAlpha(80)
+        painter.fillRect(fill_rect, fill_color)
+        painter.restore()
+        super().paint(painter, option, index)
 
 
 class TransferPanel:
@@ -36,6 +54,10 @@ class TransferPanel:
         self.archive_name = ""
         self._pending_completion = None
         self._render_upload_total = 0
+        self._queue_items: dict = {}  # op_id → QListWidgetItem
+        self._active_op_id: str = ""  # transfer being tracked for progress updates
+        if self._win.files_queue:
+            self._win.files_queue.setItemDelegate(_ProgressDelegate(self._win.files_queue))
 
     def _block_for_transfer(self):
         """Block ftp_ops during a transfer; transfer buttons are managed via cancel-mode."""
@@ -50,6 +72,39 @@ class TransferPanel:
         """Re-enable both groups after any operation (error paths / early returns)."""
         self._win._ui_state.enable_group("ftp_ops")
         self._win._ui_state.enable_group("transfer")
+
+    # ──────────────────────────────────────────────────────────────────────
+    # FILES QUEUE
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _queue_add(self, op_id: str, label_prefix: str, paths: list, color: QtGui.QColor, progress: int = 0):
+        if not self._win.files_queue:
+            return
+        for i, path in enumerate(paths):
+            name = os.path.basename(str(path).rstrip("/\\")) or str(path)
+            item = QtWidgets.QListWidgetItem(f"{label_prefix}: {name}")
+            item.setData(QtCore.Qt.ItemDataRole.UserRole, progress)
+            item.setData(QtCore.Qt.ItemDataRole.UserRole + 1, color)
+            self._win.files_queue.addItem(item)
+            self._queue_items[f"{op_id}_{i}"] = item
+
+    def _queue_update(self, op_id: str, progress: int):
+        updated = False
+        for key, item in self._queue_items.items():
+            if key.startswith(op_id):
+                item.setData(QtCore.Qt.ItemDataRole.UserRole, progress)
+                updated = True
+        if updated and self._win.files_queue:
+            self._win.files_queue.viewport().update()
+
+    def _queue_remove(self, op_id: str):
+        keys = [k for k in self._queue_items if k.startswith(op_id)]
+        for key in keys:
+            item = self._queue_items.pop(key)
+            if self._win.files_queue:
+                row = self._win.files_queue.row(item)
+                if row >= 0:
+                    self._win.files_queue.takeItem(row)
 
     @staticmethod
     def _set_cancel_btn_stylesheet(widget):
@@ -648,8 +703,14 @@ class TransferPanel:
             self._set_cancel_btn_stylesheet(self._win.download_source_btn)
         self._win.log(f"Downloading {len(remote_paths)} item(s)...", "transfer")
 
+        op_id = f"dl_{id(self)}"
+        self._active_op_id = op_id
+        self._queue_add(op_id, "Download", remote_paths, QtGui.QColor(60, 100, 180))
+
         def on_complete(success, message):
             self._pending_completion = None
+            self._queue_remove(op_id)
+            self._active_op_id = ""
             if success:
                 self._win.log("✅ Download completed", "success")
             else:
@@ -693,9 +754,14 @@ class TransferPanel:
             if mode == "selected":
                 self._set_cancel_mode(self._win.upload_selected_btn, "Cancel Upload")
                 self._set_cancel_btn_stylesheet(self._win.upload_selected_btn)
+                op_id = f"ul_{id(self)}"
+                self._active_op_id = op_id
+                self._queue_add(op_id, "Upload", local_paths, QtGui.QColor(50, 150, 70))
 
                 def on_complete(success, message):
                     self._pending_completion = None
+                    self._queue_remove(op_id)
+                    self._active_op_id = ""
                     if success:
                         self._win.log(
                             f"Upload completed: {file_count} files", "success"
@@ -726,9 +792,14 @@ class TransferPanel:
             if mode == "renders":
                 self._set_cancel_mode(self._win.upload_renders_btn, "Cancel Upload")
                 self._set_cancel_btn_stylesheet(self._win.upload_renders_btn)
+                op_id = f"ul_{id(self)}"
+                self._active_op_id = op_id
+                self._queue_add(op_id, "Upload", local_paths, QtGui.QColor(50, 150, 70))
 
                 def on_complete_renders(success, message):
                     self._pending_completion = None
+                    self._queue_remove(op_id)
+                    self._active_op_id = ""
                     total = self._render_upload_total
                     self._render_upload_total = 0
                     if success:
@@ -759,6 +830,8 @@ class TransferPanel:
                 pass
             self._pending_completion = None
         self._win.ftp_manager.stop_current_operation()
+        self._queue_remove(self._active_op_id)
+        self._active_op_id = ""
         self._win._safe_refresh_ftp()
         self.restore_button()
 
@@ -841,6 +914,13 @@ class TransferPanel:
             if confirm:
                 self._block_for_other_op()
                 self._win.log(f"Deleting {len(ftp_paths)} items...", "info")
+                del_op_id = f"del_{id(self)}"
+                self._queue_add(del_op_id, "Delete", ftp_paths, QtGui.QColor(160, 70, 70), progress=50)
+                self._wm.safe_connect_once(
+                    self._win.ftp_manager.operation_finished,
+                    lambda *_: self._queue_remove(del_op_id),
+                    self._win,
+                )
                 self._win.ftp_manager.delete_files(ftp_paths)
         elif local_paths:
             confirm = self._wm.show_buttons_dialog(
@@ -888,6 +968,7 @@ class TransferPanel:
     def on_progress(self, value: int):
         if self._win.progress_bar:
             self._win.progress_bar.setValue(value)
+        self._queue_update(self._active_op_id, value)
 
     def on_transfer_stats(
         self, speed_mbps: float, transferred: float, total: float, eta: float

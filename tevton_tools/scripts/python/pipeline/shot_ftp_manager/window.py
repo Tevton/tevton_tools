@@ -467,6 +467,8 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         }, groups=["transfer"])
         self._ui_state.disable_group("ftp_ops")
         self._ui_state.disable_group("transfer")
+        if self.reconnect_btn:
+            self.reconnect_btn.setEnabled(False)
 
     def _connect_ftp_signals_safe(self):
         self._wm.safe_connect(
@@ -559,6 +561,8 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         if connected:
             self._ui_state.enable_group("ftp_ops")
             self._ui_state.enable_group("transfer")
+            if self.reconnect_btn:
+                self.reconnect_btn.setEnabled(True)
             self._wm.safe_timer(self, self._safe_refresh_ftp, 100)
         else:
             self.log("Disconnected", "warning")
@@ -696,6 +700,16 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         """Start a sequential FTP move queue. moves: list of (old_path, new_path)."""
         self._ftp_move_queue = list(moves)
         self._ftp_move_total = len(moves)
+        if self.transfer_panel:
+            self._ftp_move_op_id = f"mv_{id(self)}"
+            move_paths = [m[0] for m in moves]
+            self.transfer_panel._queue_add(
+                self._ftp_move_op_id,
+                "Move",
+                move_paths,
+                QtGui.QColor(160, 130, 40),
+                progress=50,
+            )
         self._drain_ftp_move_queue(True, "")
 
     def _drain_ftp_move_queue(self, success: bool, message: str):
@@ -703,11 +717,15 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         if not success:
             self.log(f"Move failed: {message}", "error")
             self._ftp_move_queue.clear()
+            if self.transfer_panel and hasattr(self, "_ftp_move_op_id"):
+                self.transfer_panel._queue_remove(self._ftp_move_op_id)
             self._ui_state.enable_group("ftp_ops")
             self._ui_state.enable_group("transfer")
             self._wm.safe_timer(self, self._safe_refresh_ftp, 200)
             return
         if not self._ftp_move_queue:
+            if self.transfer_panel and hasattr(self, "_ftp_move_op_id"):
+                self.transfer_panel._queue_remove(self._ftp_move_op_id)
             self._ui_state.enable_group("ftp_ops")
             self._ui_state.enable_group("transfer")
             self._wm.safe_timer(self, self._safe_refresh_ftp, 200)
