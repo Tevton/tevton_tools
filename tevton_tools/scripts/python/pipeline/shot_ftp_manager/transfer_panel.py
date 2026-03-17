@@ -759,9 +759,6 @@ class TransferPanel:
                 self._win.log(f"Download finished: {message}", "info")
             self._win._safe_refresh_ftp()
 
-        self._pending_completion = self._wm.safe_connect_once(
-            self._win.ftp_manager.operation_finished, on_complete, self._win
-        )
         self._wm.safe_connect_once(
             self._win.ftp_manager.files_scanned,
             lambda entries, _oid=op_id: self._on_files_scanned(_oid, entries),
@@ -773,6 +770,16 @@ class TransferPanel:
         except Exception as e:
             self._win.log(f"Download error: {e}", "error")
             self.restore_button()
+            return
+
+        # Defer the completion connection by one event-loop cycle so any
+        # in-flight operation_finished from a preceding list worker fires
+        # first and is not mistaken for the download's own completion.
+        def _connect_completion():
+            self._pending_completion = self._wm.safe_connect_once(
+                self._win.ftp_manager.operation_finished, on_complete, self._win
+            )
+        self._wm.safe_timer(self._win, _connect_completion, 0)
 
     def start_upload(self, local_paths: list, remote_dir: str, mode: str):
         """Initiate an FTP upload.
@@ -799,13 +806,15 @@ class TransferPanel:
         if mode == "renders":
             self._render_upload_total += file_count
 
+        # Always add to queue widget so items are visible even when adding to a live upload.
+        op_id = f"ul_{id(self)}"
+        self._active_op_id = op_id
+        self._queue_add(op_id, "Upload", queue_paths, QtGui.QColor(50, 150, 70), keys=queue_keys)
+
         if not self._win.ftp_manager.is_uploading():
             if mode == "selected":
                 self._set_cancel_mode(self._win.upload_selected_btn, "Cancel Upload")
                 self._set_cancel_btn_stylesheet(self._win.upload_selected_btn)
-                op_id = f"ul_{id(self)}"
-                self._active_op_id = op_id
-                self._queue_add(op_id, "Upload", queue_paths, QtGui.QColor(50, 150, 70), keys=queue_keys)
 
                 def on_complete(success, message):
                     self._pending_completion = None
@@ -841,9 +850,6 @@ class TransferPanel:
             if mode == "renders":
                 self._set_cancel_mode(self._win.upload_renders_btn, "Cancel Upload")
                 self._set_cancel_btn_stylesheet(self._win.upload_renders_btn)
-                op_id = f"ul_{id(self)}"
-                self._active_op_id = op_id
-                self._queue_add(op_id, "Upload", queue_paths, QtGui.QColor(50, 150, 70), keys=queue_keys)
 
                 def on_complete_renders(success, message):
                     self._pending_completion = None

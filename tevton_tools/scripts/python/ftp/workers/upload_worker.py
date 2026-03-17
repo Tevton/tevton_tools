@@ -54,18 +54,11 @@ class FTPUploadWorker(BaseTransferWorker):
         self._stats_lock = threading.Lock()
         self._log_queue: queue.Queue = queue.Queue()
         self._stop_called = False
-        self._file_progress: dict = {}
-        self._file_progress_lock = threading.Lock()
-
     def add_total_bytes(self, n: int):
         self.total_bytes += n
 
     def get_transferred_bytes(self) -> int:
         return self._transferred_bytes
-
-    def get_file_progress(self) -> dict:
-        with self._file_progress_lock:
-            return dict(self._file_progress)
 
     def stop(self):
         """Cancel: set flag and force-close all active FTP sockets immediately."""

@@ -46,17 +46,10 @@ class FTPDownloadWorker(BaseTransferWorker):
         self._download_lock = threading.Lock()
         self._errors: list = []
         self._log_queue: queue.Queue = queue.Queue()
-        self._file_progress: dict = {}
-        self._file_progress_lock = threading.Lock()
-
     def set_overwrite(self, confirmed: bool):
         """Called from the main thread to unblock the worker after user confirms."""
         self._overwrite_confirmed = confirmed
         self._overwrite_event.set()
-
-    def get_file_progress(self) -> dict:
-        with self._file_progress_lock:
-            return dict(self._file_progress)
 
     def stop(self):
         """Cancel: set flag and force-close all active FTP sockets immediately."""

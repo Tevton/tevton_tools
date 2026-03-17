@@ -1,3 +1,4 @@
+import threading
 from PySide6 import QtCore
 from ftplib import FTP
 
@@ -28,6 +29,12 @@ class BaseFTPWorker(QtCore.QThread):
         self._is_running = True
         self._finished_emitted = False
         self._ui_state = None
+        self._file_progress: dict = {}
+        self._file_progress_lock = threading.Lock()
+
+    def get_file_progress(self) -> dict:
+        with self._file_progress_lock:
+            return dict(self._file_progress)
 
     # ------------------------------------------------------------------
     # Connection

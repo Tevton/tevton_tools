@@ -1,4 +1,3 @@
-import threading
 from PySide6 import QtCore
 from .base_worker import BaseFTPWorker
 
@@ -18,12 +17,6 @@ class FTPDeleteWorker(BaseFTPWorker):
     def __init__(self, host, user, password, port, remote_files):
         super().__init__(host, user, password, port)
         self.remote_files = remote_files or []
-        self._file_progress: dict = {}
-        self._file_progress_lock = threading.Lock()
-
-    def get_file_progress(self) -> dict:
-        with self._file_progress_lock:
-            return dict(self._file_progress)
 
     def run(self):
         if not self.remote_files:
@@ -74,9 +67,9 @@ class FTPDeleteWorker(BaseFTPWorker):
                         deleted += 1
                         self.update_progress(int(deleted / total * 100))
                         continue
-                    if is_dir:
-                        # Directory not empty — may contain hidden files not returned
-                        # by MLSD (e.g. .ftpquota). Purge them and retry rmd().
+                    if is_dir or "not a directory" in err:
+                        # Directory not empty (or scanned as file but actually a dir).
+                        # Purge contents and retry rmd().
                         if self._force_rmdir(ftp, remote_path):
                             with self._file_progress_lock:
                                 self._file_progress[remote_path] = 100
@@ -134,42 +127,47 @@ class FTPDeleteWorker(BaseFTPWorker):
         items.append((remote_path, True))
 
     def _force_rmdir(self, ftp, remote_path: str) -> bool:
-        """Purge any remaining contents of a directory (e.g. hidden files not
-        returned by MLSD) then remove the directory. Returns True on success."""
-        try:
-            children = self._list_dir(ftp, remote_path)
-        except Exception:
-            children = []
+        """Recursively purge a directory tree via NLST and remove it.
 
-        for name, is_dir in children:
-            child = f"{remote_path.rstrip('/')}/{name}"
-            try:
-                if is_dir:
-                    self._force_rmdir(ftp, child)
-                else:
-                    ftp.delete(child)
-            except Exception:
-                pass
-
-        # Also sweep with NLST which may reveal files MLSD hides.
-        try:
-            for entry in ftp.nlst(remote_path):
-                name = entry.rstrip("/").split("/")[-1]
-                if name in (".", ".."):
-                    continue
-                child = f"{remote_path.rstrip('/')}/{name}"
+        Used as a fallback when rmd() fails with "Directory not empty" — handles
+        files that were invisible to MLSD during the scan phase (e.g. hidden files,
+        or directories the server refused to list until cwd'd into them).
+        Returns True on success.
+        """
+        # Collect entries via absolute-path NLST, then relative NLST from inside.
+        entries = set()
+        for listing_path in (remote_path, "."):
+            if listing_path == ".":
                 try:
-                    ftp.delete(child)
+                    ftp.cwd(remote_path)
                 except Exception:
-                    try:
-                        ftp.rmd(child)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+                    break
+            try:
+                raw = ftp.nlst(listing_path)
+            except Exception:
+                raw = []
+            if listing_path == ".":
+                try:
+                    ftp.cwd("/")
+                except Exception:
+                    pass
+            for entry in raw:
+                name = entry.rstrip("/").split("/")[-1]
+                if name and name not in (".", ".."):
+                    entries.add(f"{remote_path.rstrip('/')}/{name}")
+            if entries:
+                break  # absolute NLST was sufficient
+
+        for child in entries:
+            try:
+                ftp.delete(child)
+            except Exception:
+                # Might be a subdirectory — recurse.
+                self._force_rmdir(ftp, child)
 
         try:
             ftp.rmd(remote_path)
             return True
-        except Exception:
+        except Exception as e:
+            self.log(f"Failed to remove directory {remote_path.split('/')[-1]}: {e}", "warning")
             return False
