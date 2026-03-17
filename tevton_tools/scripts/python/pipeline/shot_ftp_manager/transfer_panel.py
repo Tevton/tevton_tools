@@ -77,7 +77,7 @@ class TransferPanel:
     # FILES QUEUE
     # ──────────────────────────────────────────────────────────────────────
 
-    def _queue_add(self, op_id: str, label_prefix: str, paths: list, color: QtGui.QColor, progress: int = 0):
+    def _queue_add(self, op_id: str, label_prefix: str, paths: list, color: QtGui.QColor, progress: int = 0, keys: list = None):
         if not self._win.files_queue:
             return
         for i, path in enumerate(paths):
@@ -86,7 +86,8 @@ class TransferPanel:
             item.setData(QtCore.Qt.ItemDataRole.UserRole, progress)
             item.setData(QtCore.Qt.ItemDataRole.UserRole + 1, color)
             self._win.files_queue.addItem(item)
-            self._queue_items[f"{op_id}_{i}"] = item
+            item_key = f"{op_id}\0{keys[i]}" if keys else f"{op_id}\0{i}"
+            self._queue_items[item_key] = item
 
     def _queue_update(self, op_id: str, progress: int):
         updated = False
@@ -105,6 +106,47 @@ class TransferPanel:
                 row = self._win.files_queue.row(item)
                 if row >= 0:
                     self._win.files_queue.takeItem(row)
+
+    def _apply_file_progress(self, file_progress: dict):
+        """Update individual queue items from worker's per-file progress dict.
+        Items reaching 100% are removed immediately."""
+        if not self._active_op_id or not file_progress:
+            return
+        prefix = self._active_op_id + "\0"
+        to_remove = []
+        updated = False
+        for key, item in self._queue_items.items():
+            if not key.startswith(prefix):
+                continue
+            file_key = key[len(prefix):]
+            if file_key in file_progress:
+                pct = file_progress[file_key]
+                if pct >= 100:
+                    to_remove.append(key)
+                else:
+                    item.setData(QtCore.Qt.ItemDataRole.UserRole, pct)
+                    updated = True
+        for key in to_remove:
+            item = self._queue_items.pop(key)
+            if self._win.files_queue:
+                row = self._win.files_queue.row(item)
+                if row >= 0:
+                    self._win.files_queue.takeItem(row)
+            updated = True
+        if updated and self._win.files_queue:
+            self._win.files_queue.viewport().update()
+
+    def _on_files_scanned(self, op_id: str, entries: list):
+        """Replace placeholder download items with expanded file list from worker scan."""
+        self._queue_remove(op_id)
+        paths = [rf for rf, _, _ in entries]
+        self._queue_add(op_id, "Download", paths, QtGui.QColor(60, 100, 180), keys=paths)
+
+    def _on_delete_scanned(self, op_id: str, entries: list):
+        """Replace placeholder delete items with expanded file list from worker scan."""
+        self._queue_remove(op_id)
+        paths = [p for p, is_dir in entries if not is_dir]
+        self._queue_add(op_id, "Delete", paths, QtGui.QColor(160, 70, 70), keys=paths)
 
     @staticmethod
     def _set_cancel_btn_stylesheet(widget):
@@ -705,7 +747,7 @@ class TransferPanel:
 
         op_id = f"dl_{id(self)}"
         self._active_op_id = op_id
-        self._queue_add(op_id, "Download", remote_paths, QtGui.QColor(60, 100, 180))
+        self._queue_add(op_id, "Scanning", remote_paths, QtGui.QColor(60, 100, 180))
 
         def on_complete(success, message):
             self._pending_completion = None
@@ -719,6 +761,11 @@ class TransferPanel:
 
         self._pending_completion = self._wm.safe_connect_once(
             self._win.ftp_manager.operation_finished, on_complete, self._win
+        )
+        self._wm.safe_connect_once(
+            self._win.ftp_manager.files_scanned,
+            lambda entries, _oid=op_id: self._on_files_scanned(_oid, entries),
+            self._win,
         )
 
         try:
@@ -746,6 +793,8 @@ class TransferPanel:
         remote_dir_path = PureWindowsPath(remote_dir).as_posix()
         entries = _expand_paths(local_paths, remote_dir_path)
         file_count = len(entries)
+        queue_paths = [lf for lf, _ in entries]
+        queue_keys = [f"{rd}/{os.path.basename(lf)}" for lf, rd in entries]
 
         if mode == "renders":
             self._render_upload_total += file_count
@@ -756,7 +805,7 @@ class TransferPanel:
                 self._set_cancel_btn_stylesheet(self._win.upload_selected_btn)
                 op_id = f"ul_{id(self)}"
                 self._active_op_id = op_id
-                self._queue_add(op_id, "Upload", local_paths, QtGui.QColor(50, 150, 70))
+                self._queue_add(op_id, "Upload", queue_paths, QtGui.QColor(50, 150, 70), keys=queue_keys)
 
                 def on_complete(success, message):
                     self._pending_completion = None
@@ -794,7 +843,7 @@ class TransferPanel:
                 self._set_cancel_btn_stylesheet(self._win.upload_renders_btn)
                 op_id = f"ul_{id(self)}"
                 self._active_op_id = op_id
-                self._queue_add(op_id, "Upload", local_paths, QtGui.QColor(50, 150, 70))
+                self._queue_add(op_id, "Upload", queue_paths, QtGui.QColor(50, 150, 70), keys=queue_keys)
 
                 def on_complete_renders(success, message):
                     self._pending_completion = None
@@ -915,10 +964,21 @@ class TransferPanel:
                 self._block_for_other_op()
                 self._win.log(f"Deleting {len(ftp_paths)} items...", "info")
                 del_op_id = f"del_{id(self)}"
-                self._queue_add(del_op_id, "Delete", ftp_paths, QtGui.QColor(160, 70, 70), progress=50)
+                self._active_op_id = del_op_id
+                self._queue_add(del_op_id, "Scanning", ftp_paths, QtGui.QColor(160, 70, 70))
+
+                def on_delete_complete(*_):
+                    self._queue_remove(del_op_id)
+                    self._active_op_id = ""
+
+                self._wm.safe_connect_once(
+                    self._win.ftp_manager.files_scanned,
+                    lambda entries, _oid=del_op_id: self._on_delete_scanned(_oid, entries),
+                    self._win,
+                )
                 self._wm.safe_connect_once(
                     self._win.ftp_manager.operation_finished,
-                    lambda *_: self._queue_remove(del_op_id),
+                    on_delete_complete,
                     self._win,
                 )
                 self._win.ftp_manager.delete_files(ftp_paths)
@@ -968,7 +1028,6 @@ class TransferPanel:
     def on_progress(self, value: int):
         if self._win.progress_bar:
             self._win.progress_bar.setValue(value)
-        self._queue_update(self._active_op_id, value)
 
     def on_transfer_stats(
         self, speed_mbps: float, transferred: float, total: float, eta: float
@@ -995,6 +1054,8 @@ class TransferPanel:
             worker = self._win.ftp_manager._current_worker
             if worker is not None and hasattr(worker, "emit_stats_if_due"):
                 worker.emit_stats_if_due()
+            if worker is not None and hasattr(worker, "get_file_progress"):
+                self._apply_file_progress(worker.get_file_progress())
         except Exception:
             pass
 

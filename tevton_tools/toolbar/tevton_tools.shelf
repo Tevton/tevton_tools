@@ -20,7 +20,7 @@ render_nodes_setup.create_render_node_setup()]]></script>
 render_nodes_to_solaris.translate_nodes_to_solaris()]]></script>
   </tool>
 
-  <tool name="Reload Packages" label="Reload Packages" icon="$HOME/houdini21.0/config/Icons/hpaste-cloud-settings.svg">
+  <tool name="Reload Packages" label="Reload Packages" icon="hicon:/SVGIcons.index?ENGINE_reset.svg">
     <script scriptType="python"><![CDATA[from tvt_utils import reload_packages, reload_shelves
 
 reload_packages()

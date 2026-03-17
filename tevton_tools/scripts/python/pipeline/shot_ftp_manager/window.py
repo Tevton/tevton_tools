@@ -932,6 +932,7 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         if (
             not suppress
             and success
+            and not self.ftp_manager.is_busy()
             and any(k in msg_lower for k in ("upload", "delete"))
         ):
             self._wm.safe_timer(self, self._safe_refresh_ftp, 200)

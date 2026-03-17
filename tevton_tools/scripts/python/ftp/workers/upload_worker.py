@@ -54,12 +54,18 @@ class FTPUploadWorker(BaseTransferWorker):
         self._stats_lock = threading.Lock()
         self._log_queue: queue.Queue = queue.Queue()
         self._stop_called = False
+        self._file_progress: dict = {}
+        self._file_progress_lock = threading.Lock()
 
     def add_total_bytes(self, n: int):
         self.total_bytes += n
 
     def get_transferred_bytes(self) -> int:
         return self._transferred_bytes
+
+    def get_file_progress(self) -> dict:
+        with self._file_progress_lock:
+            return dict(self._file_progress)
 
     def stop(self):
         """Cancel: set flag and force-close all active FTP sockets immediately."""
@@ -159,6 +165,9 @@ class FTPUploadWorker(BaseTransferWorker):
         file_size = os.path.getsize(local_file)
         remote_path = f"{remote_dir}/{filename}"
 
+        with self._file_progress_lock:
+            self._file_progress[remote_path] = 0
+
         self._log_queue.put(
             (f"Uploading: {remote_path} ({_format_size(file_size)})", "transfer")
         )
@@ -167,8 +176,11 @@ class FTPUploadWorker(BaseTransferWorker):
         t0 = time.time()
 
         with open(local_file, "rb") as f:
-            proxy = _CountingReader(f, self)
+            proxy = _CountingReader(f, self, remote_path, file_size)
             ftp.storbinary(f"STOR {remote_path}", proxy, blocksize=self.CHUNK_SIZE)
+
+        with self._file_progress_lock:
+            self._file_progress[remote_path] = 100
 
         elapsed = time.time() - t0
         speed = (file_size / elapsed / 1024 / 1024) if elapsed > 0 else 0
@@ -236,14 +248,22 @@ class FTPUploadWorker(BaseTransferWorker):
 
 
 class _CountingReader:
-    __slots__ = ("_f", "_worker")
+    __slots__ = ("_f", "_worker", "_file_key", "_file_size", "_file_bytes")
 
-    def __init__(self, f, worker: FTPUploadWorker):
+    def __init__(self, f, worker: FTPUploadWorker, file_key: str, file_size: int):
         self._f = f
         self._worker = worker
+        self._file_key = file_key
+        self._file_size = file_size
+        self._file_bytes = 0
 
     def read(self, size=-1):
         data = self._f.read(size)
         if data:
-            self._worker._transferred_bytes += len(data)
+            n = len(data)
+            self._worker._transferred_bytes += n
+            self._file_bytes += n
+            pct = int(self._file_bytes / self._file_size * 100) if self._file_size > 0 else 0
+            with self._worker._file_progress_lock:
+                self._worker._file_progress[self._file_key] = min(pct, 99)
         return data

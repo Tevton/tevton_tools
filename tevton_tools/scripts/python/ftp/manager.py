@@ -44,6 +44,7 @@ class FTPManager(QtCore.QObject):
     busy_changed = QtCore.Signal(bool)
     transfer_stats = QtCore.Signal(float, float, float, float)
     overwrite_needed = QtCore.Signal(list)  # list of conflicting filenames
+    files_scanned = QtCore.Signal(list)    # expanded file list from scan phase
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -296,6 +297,8 @@ class FTPManager(QtCore.QObject):
             worker.transfer_stats.connect(self.transfer_stats)
         if hasattr(worker, "overwrite_needed"):
             worker.overwrite_needed.connect(self.overwrite_needed)
+        if hasattr(worker, "files_scanned"):
+            worker.files_scanned.connect(self.files_scanned)
         worker.finished.connect(
             lambda ok, msg, w=worker: self._on_operation_finished(ok, msg, w)
         )
