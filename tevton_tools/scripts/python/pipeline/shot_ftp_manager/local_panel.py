@@ -1,6 +1,6 @@
 import os
 import shutil
-from PySide6 import QtCore, QtWidgets
+from qt_shim import QtCore, QtWidgets
 from ftp.ftp_utils import format_size as _format_size
 
 
@@ -136,7 +136,7 @@ class LocalPanel:
         self._win.current_local_path = parent_path
         self._win.local_path_edit.setText(parent_path)
         self._win.log(f"Local: {parent_path}", "info")
-        tree.sortByColumn(0, QtCore.Qt.SortOrder.AscendingOrder)
+        tree.sortByColumn(0, QtCore.Qt.AscendingOrder)
 
     def on_double_clicked(self, proxy_index):
         """Navigate into a local directory on double-click."""
@@ -153,7 +153,7 @@ class LocalPanel:
         self._win.current_local_path = dir_path
         self._win.local_path_edit.setText(dir_path)
         self._win.log(f"Local: {dir_path}", "info")
-        self._win.local_tree.sortByColumn(0, QtCore.Qt.SortOrder.AscendingOrder)
+        self._win.local_tree.sortByColumn(0, QtCore.Qt.AscendingOrder)
 
     # ------------------------------------------------------------------
     # Selection

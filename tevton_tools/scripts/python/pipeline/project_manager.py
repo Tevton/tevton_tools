@@ -2,7 +2,7 @@ import hou
 import shutil
 import tvt_utils
 from pathlib import Path
-from PySide6 import QtCore, QtGui, QtUiTools, QtWidgets
+from qt_shim import QtCore, QtGui, QtUiTools, QtWidgets
 import pipeline.projects_store as projects_store
 from pipeline.project_setup import ProjectSetup, ProjectMode
 from pipeline.shot_setup import ShotSetup, ShotMode
@@ -661,15 +661,12 @@ class ProjectManager(QtWidgets.QMainWindow):
             / self.current_shot_name
             / self.current_file_name
         )
-        print(mode)
         if file_path.is_dir():
             tvt_utils.open_file_or_folder(str(file_path))
         else:
             if mode == "selected":
-                print("Opening")
                 tvt_utils.open_file_or_folder(str(file_path), file_path.suffix)
             if mode == "new_session":
-                print("Opening as new session")
                 tvt_utils.open_as_new_session(str(file_path))
 
     def _on_file_created(self, file_name: str = ""):

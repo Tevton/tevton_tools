@@ -3,7 +3,7 @@ import zipfile
 import re as _re
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Optional, List
-from PySide6 import QtWidgets, QtCore, QtGui
+from qt_shim import QtWidgets, QtCore, QtGui
 
 import tvt_utils
 from ftp.ftp_utils import format_size as _format_size
@@ -22,8 +22,8 @@ class _ProgressDelegate(QtWidgets.QStyledItemDelegate):
     """Paints a translucent progress fill behind each files-queue item."""
 
     def paint(self, painter, option, index):
-        progress = index.data(QtCore.Qt.ItemDataRole.UserRole) or 0
-        color = index.data(QtCore.Qt.ItemDataRole.UserRole + 1) or QtGui.QColor(60, 120, 60)
+        progress = index.data(QtCore.Qt.UserRole) or 0
+        color = index.data(QtCore.Qt.UserRole + 1) or QtGui.QColor(60, 120, 60)
         painter.save()
         fill_w = int(option.rect.width() * progress / 100)
         fill_rect = QtCore.QRect(option.rect).adjusted(0, 1, 0, -1)
@@ -83,8 +83,8 @@ class TransferPanel:
         for i, path in enumerate(paths):
             name = os.path.basename(str(path).rstrip("/\\")) or str(path)
             item = QtWidgets.QListWidgetItem(f"{label_prefix}: {name}")
-            item.setData(QtCore.Qt.ItemDataRole.UserRole, progress)
-            item.setData(QtCore.Qt.ItemDataRole.UserRole + 1, color)
+            item.setData(QtCore.Qt.UserRole, progress)
+            item.setData(QtCore.Qt.UserRole + 1, color)
             self._win.files_queue.addItem(item)
             item_key = f"{op_id}\0{keys[i]}" if keys else f"{op_id}\0{i}"
             self._queue_items[item_key] = item
@@ -93,7 +93,7 @@ class TransferPanel:
         updated = False
         for key, item in self._queue_items.items():
             if key.startswith(op_id):
-                item.setData(QtCore.Qt.ItemDataRole.UserRole, progress)
+                item.setData(QtCore.Qt.UserRole, progress)
                 updated = True
         if updated and self._win.files_queue:
             self._win.files_queue.viewport().update()
@@ -124,7 +124,7 @@ class TransferPanel:
                 if pct >= 100:
                     to_remove.append(key)
                 else:
-                    item.setData(QtCore.Qt.ItemDataRole.UserRole, pct)
+                    item.setData(QtCore.Qt.UserRole, pct)
                     updated = True
         for key in to_remove:
             item = self._queue_items.pop(key)

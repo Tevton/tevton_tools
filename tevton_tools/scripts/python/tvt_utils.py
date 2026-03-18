@@ -3,7 +3,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from PySide6 import QtWidgets, QtCore
+from qt_shim import QtWidgets, QtCore
 
 
 def reload_packages():

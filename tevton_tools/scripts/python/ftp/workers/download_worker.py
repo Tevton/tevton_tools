@@ -3,7 +3,7 @@ import time
 import queue
 import threading
 from collections import deque
-from PySide6 import QtCore
+from qt_shim import QtCore
 from .base_transfer_worker import BaseTransferWorker, _format_size
 
 

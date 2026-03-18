@@ -1,7 +1,7 @@
 from datetime import datetime
 from .base_worker import BaseFTPWorker
 from ..ftp_utils import format_size as _format_size
-from PySide6 import QtCore
+from qt_shim import QtCore
 
 
 def _format_modify(raw: str) -> str:
