@@ -1,6 +1,6 @@
 import hou
 from pathlib import Path
-from PySide6 import QtCore, QtUiTools, QtWidgets, QtGui  # QtUiTools used in _load_ui
+from PySide6 import QtCore, QtUiTools, QtWidgets, QtGui
 
 from ftp import FTPManager
 from ui_state import UIStateController
@@ -444,31 +444,45 @@ class ShotFTPManager(QtWidgets.QMainWindow):
 
     def _register_widgets(self):
         # Always-free: never touched by operation blocking.
-        self._ui_state.register_many({
-            "reconnect_btn":   self.reconnect_btn,
-            "local_tree":      self.local_tree,
-            "local_back_btn":  self.local_back_btn,
-            "local_path_edit": self.local_path_edit,
-        })
+        self._ui_state.register_many(
+            {
+                "reconnect_btn": self.reconnect_btn,
+                "local_tree": self.local_tree,
+                "local_back_btn": self.local_back_btn,
+                "local_path_edit": self.local_path_edit,
+            }
+        )
         # Blocked during ANY FTP operation.
-        self._ui_state.register_many({
-            "ftp_back_btn":        self.ftp_back_btn,
-            "ftp_path_edit":       self.ftp_path_edit,
-            "new_folder_btn":      self.new_folder_btn,
-            "delete_selected_btn": self.delete_selected_btn,
-            "zip_selected_btn":    self.zip_selected_btn,
-        }, groups=["ftp_ops"])
+        self._ui_state.register_many(
+            {
+                "ftp_back_btn": self.ftp_back_btn,
+                "ftp_path_edit": self.ftp_path_edit,
+                "new_folder_btn": self.new_folder_btn,
+                "delete_selected_btn": self.delete_selected_btn,
+                "zip_selected_btn": self.zip_selected_btn,
+            },
+            groups=["ftp_ops"],
+        )
         # Blocked during non-transfer ops; managed individually during transfers.
-        self._ui_state.register_many({
-            "upload_renders_btn":    self.upload_renders_btn,
-            "upload_selected_btn":   self.upload_selected_btn,
-            "download_source_btn":   self.download_source_btn,
-            "download_selected_btn": self.download_selected_btn,
-        }, groups=["transfer"])
+        self._ui_state.register_many(
+            {
+                "upload_renders_btn": self.upload_renders_btn,
+                "upload_selected_btn": self.upload_selected_btn,
+                "download_source_btn": self.download_source_btn,
+                "download_selected_btn": self.download_selected_btn,
+            },
+            groups=["transfer"],
+        )
         self._ui_state.disable_group("ftp_ops")
         self._ui_state.disable_group("transfer")
         if self.reconnect_btn:
             self.reconnect_btn.setEnabled(False)
+
+        # Temp disable, waiting until functionality be done
+        if self.unzip_down_files:
+            self.unzip_down_files.setEnabled(False)
+        if self.del_zip_down:
+            self.del_zip_down.setEnabled(False)
 
     def _connect_ftp_signals_safe(self):
         self._wm.safe_connect(
