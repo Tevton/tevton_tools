@@ -136,6 +136,7 @@ class ProjectManager(QtWidgets.QMainWindow):
             QtWidgets.QPushButton, "pb_delete_file"
         )
         self.open_file_button = self.ui.findChild(QtWidgets.QPushButton, "pb_open_file")
+        self.open_file_button = self.ui.findChild(QtWidgets.QPushButton, "pb_open_file")
         self.filter_nk_check = self.ui.findChild(QtWidgets.QCheckBox, "cb_filter_nk")
         self.show_all_check = self.ui.findChild(QtWidgets.QCheckBox, "cb_show_all")
 
@@ -201,7 +202,7 @@ class ProjectManager(QtWidgets.QMainWindow):
             lambda: self.delete_object_by_type("file")
         )
         self.open_file_button.clicked.connect(self.open_selected)
-        self.file_list.itemDoubleClicked.connect(self.open_selected)
+        self.file_list.itemDoubleClicked.connect(lambda _: self.open_selected())
         self.filter_nk_check.stateChanged.connect(self.load_file_list)
         self.show_all_check.stateChanged.connect(self.load_file_list)
 
@@ -283,6 +284,9 @@ class ProjectManager(QtWidgets.QMainWindow):
         if item:
             menu.addSeparator()
             menu.addAction("Open").triggered.connect(self.open_selected)
+            menu.addAction("New Session").triggered.connect(
+                lambda: self.open_selected("new_session")
+            )
             menu.addAction("Rename").triggered.connect(self._edit_file)
             menu.addAction("Reveal in Explorer").triggered.connect(
                 lambda: self.reveal_folder_by_type("shot")
@@ -643,10 +647,9 @@ class ProjectManager(QtWidgets.QMainWindow):
             shot_name=self.current_shot_name,
         )
 
-    def open_selected(self):
+    def open_selected(self, mode="selected"):
         if not self.has_file_selected:
             return
-
         try:
             project = projects_store.get_project(self.current_project_name)
         except projects_store.ProjectStoreError:
@@ -658,11 +661,16 @@ class ProjectManager(QtWidgets.QMainWindow):
             / self.current_shot_name
             / self.current_file_name
         )
-
+        print(mode)
         if file_path.is_dir():
             tvt_utils.open_file_or_folder(str(file_path))
         else:
-            tvt_utils.open_file_or_folder(str(file_path), file_path.suffix)
+            if mode == "selected":
+                print("Opening")
+                tvt_utils.open_file_or_folder(str(file_path), file_path.suffix)
+            if mode == "new_session":
+                print("Opening as new session")
+                tvt_utils.open_as_new_session(str(file_path))
 
     def _on_file_created(self, file_name: str = ""):
         """

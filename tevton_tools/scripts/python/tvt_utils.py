@@ -306,6 +306,25 @@ hou.hipFile.save(r"{path}")
     return True
 
 
+def open_as_new_session(hip_path: str):
+    """
+    Open a .hip file in a new Houdini window (cross-platform)
+    """
+    import subprocess
+
+    hfs_path = os.environ.get("HFS", "")
+
+    if os.name == "nt":
+        exe = str(Path(hfs_path) / "bin" / "houdini.exe") if hfs_path else "houdini.exe"
+        subprocess.Popen(
+            [exe, hip_path],
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
+        )
+    else:
+        exe = str(Path(hfs_path) / "bin" / "houdini") if hfs_path else "houdini"
+        subprocess.Popen([exe, hip_path], start_new_session=True)
+
+
 def get_user_tool_dir():
     """
     Creates necessary subfolders and empty JSON file to store project data, if they don't exist.
