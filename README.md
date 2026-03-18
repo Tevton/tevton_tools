@@ -17,17 +17,17 @@ A Houdini pipeline package for project, shot, and .hip file management with inte
 
 2. **Copy the package descriptor** `tevton_tools.json` into your Houdini packages folder:
    ```
-   $HOUDINI_USER_PREF_DIR/packages/
+   Documents/houdiniXX.X/packages/
    ```
 
 3. **Copy the tool folder** `tevton_tools/` into the same packages folder:
    ```
-   $HOUDINI_USER_PREF_DIR/packages/tevton_tools/
+   Documents/houdiniXX.X/packages/tevton_tools/
    ```
 
    Your final layout should look like:
    ```
-   $HOUDINI_USER_PREF_DIR/
+   Documents/houdiniXX.X/
    └── packages/
        ├── tevton_tools.json
        └── tevton_tools/
@@ -52,7 +52,7 @@ A dual-panel file transfer window (FTP remote on the left, local filesystem on t
 Saves the current .hip file with an automatically incremented version number (e.g. `scene_v001.hip` → `scene_v002.hip`).
 
 ### Render Nodes Setup
-Batch-creates ROP render nodes for the selected nodes in the network editor.
+Find null nodes inside selected nodes with specified prefix and create SOP Geometry node for each node found with prefix.
 
 ### SOP Nodes to Solaris
 Converts selected SOP import references into Solaris LOP layer nodes for USD-based workflows.
