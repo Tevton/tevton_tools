@@ -1,4 +1,5 @@
-from PySide6.QtCore import Signal
+from qt_shim import QtCore
+Signal = QtCore.Signal
 from .base_worker import BaseFTPWorker
 from ..ftp_utils import format_size as _format_size
 

@@ -1,6 +1,6 @@
 import hou
 from pathlib import Path
-from PySide6 import QtCore, QtUiTools, QtWidgets, QtGui
+from qt_shim import QtCore, QtUiTools, QtWidgets, QtGui
 
 from ftp import FTPManager
 from ui_state import UIStateController
@@ -161,7 +161,7 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         self.log_text.setReadOnly(True)
         self.log_text.document().setDocumentMargin(2)
         self.con_status.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
+            QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
         )
         for lbl in (
             self.ftp_text,
@@ -175,13 +175,13 @@ class ShotFTPManager(QtWidgets.QMainWindow):
             lbl.setAlignment(QtCore.Qt.AlignCenter)
 
         self.speed_status.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+            QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
         )
         self.total_status.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+            QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
         )
         self.eta_status.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+            QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
         )
         tvt_utils.set_connection_status(self, "disconnected")
         self.delshortcut = QtGui.QShortcut(QtGui.QKeySequence("Delete"), self)
@@ -232,15 +232,15 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         etype = event.type()
 
         if self.ftp_tree and obj is self.ftp_tree.viewport():
-            if etype == QtCore.QEvent.Type.MouseButtonPress:
-                if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            if etype == QtCore.QEvent.MouseButtonPress:
+                if event.button() == QtCore.Qt.LeftButton:
                     self._ftp_drag_start_pos = event.pos()
-            elif etype == QtCore.QEvent.Type.MouseButtonRelease:
+            elif etype == QtCore.QEvent.MouseButtonRelease:
                 self._ftp_drag_start_pos = None
-            elif etype == QtCore.QEvent.Type.MouseMove:
+            elif etype == QtCore.QEvent.MouseMove:
                 if (
                     self._ftp_drag_start_pos is not None
-                    and event.buttons() & QtCore.Qt.MouseButton.LeftButton
+                    and event.buttons() & QtCore.Qt.LeftButton
                 ):
                     dist = (event.pos() - self._ftp_drag_start_pos).manhattanLength()
                     if dist >= QtWidgets.QApplication.startDragDistance():
@@ -267,21 +267,21 @@ class ShotFTPManager(QtWidgets.QMainWindow):
                             painter.end()
                             drag.setPixmap(pm)
                             drag.setHotSpot(QtCore.QPoint(12, 12))
-                            drag.exec(QtCore.Qt.DropAction.CopyAction)
+                            drag.exec(QtCore.Qt.CopyAction)
                         return True
-            elif etype == QtCore.QEvent.Type.DragEnter:
+            elif etype == QtCore.QEvent.DragEnter:
                 if event.mimeData().hasUrls() or event.mimeData().hasFormat(
                     FTP_MIME_TYPE
                 ):
                     event.acceptProposedAction()
                     return True
-            elif etype == QtCore.QEvent.Type.DragMove:
+            elif etype == QtCore.QEvent.DragMove:
                 if event.mimeData().hasUrls() or event.mimeData().hasFormat(
                     FTP_MIME_TYPE
                 ):
                     event.acceptProposedAction()
                     return True
-            elif etype == QtCore.QEvent.Type.Drop:
+            elif etype == QtCore.QEvent.Drop:
                 mime = event.mimeData()
                 if mime.hasFormat(FTP_MIME_TYPE):
                     raw = bytes(mime.data(FTP_MIME_TYPE)).decode("utf-8")
@@ -328,15 +328,15 @@ class ShotFTPManager(QtWidgets.QMainWindow):
                     return True
 
         if self.local_tree and obj is self.local_tree.viewport():
-            if etype == QtCore.QEvent.Type.MouseButtonPress:
-                if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            if etype == QtCore.QEvent.MouseButtonPress:
+                if event.button() == QtCore.Qt.LeftButton:
                     self._local_drag_start_pos = event.pos()
-            elif etype == QtCore.QEvent.Type.MouseButtonRelease:
+            elif etype == QtCore.QEvent.MouseButtonRelease:
                 self._local_drag_start_pos = None
-            elif etype == QtCore.QEvent.Type.MouseMove:
+            elif etype == QtCore.QEvent.MouseMove:
                 if (
                     self._local_drag_start_pos is not None
-                    and event.buttons() & QtCore.Qt.MouseButton.LeftButton
+                    and event.buttons() & QtCore.Qt.LeftButton
                 ):
                     dist = (event.pos() - self._local_drag_start_pos).manhattanLength()
                     if dist >= QtWidgets.QApplication.startDragDistance():
@@ -361,23 +361,23 @@ class ShotFTPManager(QtWidgets.QMainWindow):
                             painter.end()
                             drag.setPixmap(pm)
                             drag.setHotSpot(QtCore.QPoint(12, 12))
-                            drag.exec(QtCore.Qt.DropAction.MoveAction)
+                            drag.exec(QtCore.Qt.MoveAction)
                         return True
-            elif etype == QtCore.QEvent.Type.DragEnter:
+            elif etype == QtCore.QEvent.DragEnter:
                 if (
                     event.mimeData().hasFormat(FTP_MIME_TYPE)
                     or event.mimeData().hasUrls()
                 ):
                     event.acceptProposedAction()
                     return True
-            elif etype == QtCore.QEvent.Type.DragMove:
+            elif etype == QtCore.QEvent.DragMove:
                 if (
                     event.mimeData().hasFormat(FTP_MIME_TYPE)
                     or event.mimeData().hasUrls()
                 ):
                     event.acceptProposedAction()
                     return True
-            elif etype == QtCore.QEvent.Type.Drop:
+            elif etype == QtCore.QEvent.Drop:
                 mime = event.mimeData()
                 if mime.hasFormat(FTP_MIME_TYPE):
                     raw = bytes(mime.data(FTP_MIME_TYPE)).decode("utf-8")

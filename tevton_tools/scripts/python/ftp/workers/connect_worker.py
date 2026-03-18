@@ -1,6 +1,6 @@
 from ftplib import all_errors
 from .base_worker import BaseFTPWorker
-from PySide6 import QtCore
+from qt_shim import QtCore
 
 
 class FTPConnectWorker(BaseFTPWorker):

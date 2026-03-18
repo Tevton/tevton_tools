@@ -1,8 +1,6 @@
 import hou
 from pathlib import Path
-from PySide6 import QtCore, QtGui, QtWidgets
-from PySide6.QtWidgets import QFileIconProvider
-from PySide6.QtCore import QFileInfo
+from qt_shim import QtCore, QtGui, QtWidgets
 from config.config import FTP_SHOT_PATH, USER_DATA_PATH
 from pipeline.window_manager import WindowManager
 
@@ -25,13 +23,13 @@ class FTPPanel:
         self._sort_column = 0
         self._sort_ascending = True
         _ICON_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        self._icon_provider = QFileIconProvider()
+        self._icon_provider = QtWidgets.QFileIconProvider()
         self._icon_memory: dict = {}
         self._icon_dir = self._load_or_fetch_icon(
-            "__dir__", lambda: self._icon_provider.icon(QFileIconProvider.Folder)
+            "__dir__", lambda: self._icon_provider.icon(QtWidgets.QFileIconProvider.Folder)
         )
         self._icon_file = self._load_or_fetch_icon(
-            "__file__", lambda: self._icon_provider.icon(QFileIconProvider.File)
+            "__file__", lambda: self._icon_provider.icon(QtWidgets.QFileIconProvider.File)
         )
         self._setup_header_sort()
 
@@ -78,7 +76,7 @@ class FTPPanel:
             return self._icon_memory[ext]
         key = ext if ext else "__noext__"
         icon = self._load_or_fetch_icon(
-            key, lambda: self._icon_provider.icon(QFileInfo(f"dummy.{ext}" if ext else "dummy"))
+            key, lambda: self._icon_provider.icon(QtCore.QFileInfo(f"dummy.{ext}" if ext else "dummy"))
         )
         if icon.isNull():
             icon = self._icon_file

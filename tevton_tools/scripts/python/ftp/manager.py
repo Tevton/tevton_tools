@@ -1,7 +1,7 @@
 import os
 import queue
 import threading
-from PySide6 import QtCore
+from qt_shim import QtCore
 from typing import Optional, List, Callable
 
 from .ftp_utils import get_ftp_settings, format_size as _format_size

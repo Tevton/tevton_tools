@@ -1,5 +1,5 @@
 import threading
-from PySide6 import QtCore
+from qt_shim import QtCore
 from ftplib import FTP
 
 

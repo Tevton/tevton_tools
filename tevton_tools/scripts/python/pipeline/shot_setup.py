@@ -4,7 +4,7 @@ from enum import Enum
 from pathlib import Path
 import pipeline.projects_store as projects_store
 from pipeline.window_manager import get_window_manager
-from PySide6 import QtCore, QtUiTools, QtWidgets
+from qt_shim import QtCore, QtUiTools, QtWidgets
 
 __all__ = ["ShotSetup", "ShotMode"]
 

@@ -1,4 +1,4 @@
-from PySide6 import QtWidgets, QtCore
+from qt_shim import QtWidgets, QtCore
 
 
 class UIStateController:

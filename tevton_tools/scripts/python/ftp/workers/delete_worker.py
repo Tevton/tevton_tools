@@ -1,4 +1,4 @@
-from PySide6 import QtCore
+from qt_shim import QtCore
 from .base_worker import BaseFTPWorker
 
 

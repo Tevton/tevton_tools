@@ -3,7 +3,7 @@ import os
 from enum import Enum
 from pathlib import Path
 from shutil import copy
-from PySide6 import QtCore, QtUiTools, QtWidgets, QtGui
+from qt_shim import QtCore, QtUiTools, QtWidgets, QtGui
 
 import tvt_utils
 import pipeline.projects_store as projects_store

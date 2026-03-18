@@ -3,7 +3,7 @@ import weakref
 from datetime import datetime
 from pathlib import Path
 from typing import Type, Optional, Dict, Any, Callable
-from PySide6 import QtCore, QtWidgets, QtGui
+from qt_shim import QtCore, QtWidgets, QtGui
 from functools import wraps
 from config.config import USER_DATA_PATH
 
@@ -503,7 +503,7 @@ class WindowManager:
         size = dialog.size()
         dialog.setFixedSize(size.width() + 20, size.height())
 
-        return dialog.exec_() == QtWidgets.QDialog.Accepted
+        return dialog.exec() == QtWidgets.QDialog.Accepted
 
     def show_input_field_dialog(
         self,
