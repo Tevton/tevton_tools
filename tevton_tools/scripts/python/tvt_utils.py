@@ -391,10 +391,14 @@ def set_connection_status(widget, state):
 
 
 def extract_trailing_version(name: str) -> int:
-    """Extract the trailing number from a name string.
-    Examples: 'v001' -> 1, '02' -> 2, 'snow_v7' -> 7, 'fire' -> -1
+    """Extract the version number from a name string.
+    Prefers trailing digits, falls back to embedded _NNN or vNNN patterns.
+    Examples: 'v001' -> 1, '02' -> 2, 'snow_v7' -> 7, 'bbb_001_bbb' -> 1, 'fire' -> -1
     """
     m = re.search(r"(\d+)$", name)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"[_v](\d+)", name, re.IGNORECASE)
     return int(m.group(1)) if m else -1
 
 

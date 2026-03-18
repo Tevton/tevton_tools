@@ -806,6 +806,12 @@ class TransferPanel:
         # Mirroring structure in FTP
         remote_dir_path = PureWindowsPath(remote_dir).as_posix()
         entries = _expand_paths(local_paths, remote_dir_path)
+
+        if not entries:
+            self._win.log("No files found to upload", "warning")
+            self._unblock_all()
+            return
+
         file_count = len(entries)
         queue_paths = [lf for lf, _ in entries]
         queue_keys = [f"{rd}/{os.path.basename(lf)}" for lf, rd in entries]
