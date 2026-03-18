@@ -98,11 +98,9 @@ class FileSetup(QtWidgets.QMainWindow):
         if self.mode == FileMode.CREATE:
             self.setWindowTitle(f"File Creator - {self.cur_shot_name}")
             self.create_file_btn.setText("Create File")
-            self.create_file_btn.setEnabled(False)
         else:
             self.setWindowTitle(f"Edit File - {self.file_name_param}")
             self.create_file_btn.setText("Save Changes")
-            self.create_file_btn.setEnabled(True)
             self.start_frame.setEnabled(False)
             self.end_frame.setEnabled(False)
             self._load_file_data()
@@ -149,7 +147,7 @@ class FileSetup(QtWidgets.QMainWindow):
 
         shot_prefix = self.cur_shot_name + "_"
         if base.startswith(shot_prefix):
-            after_shot = base[len(shot_prefix) :]  # "FX_EXPLOSION"
+            after_shot = base[len(shot_prefix) :]
         else:
             after_shot = base
 
@@ -157,7 +155,7 @@ class FileSetup(QtWidgets.QMainWindow):
         dept = parts[0] if parts else ""
         suffix = parts[1] if len(parts) > 1 else ""
 
-        # Set department combo
+        # Set department
         dept_index = self.department.findText(dept)
         if dept_index >= 0:
             self.department.setCurrentIndex(dept_index)

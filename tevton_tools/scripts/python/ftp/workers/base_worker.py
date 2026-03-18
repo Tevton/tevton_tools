@@ -1,3 +1,4 @@
+import threading
 from PySide6 import QtCore
 from ftplib import FTP
 
@@ -28,6 +29,12 @@ class BaseFTPWorker(QtCore.QThread):
         self._is_running = True
         self._finished_emitted = False
         self._ui_state = None
+        self._file_progress: dict = {}
+        self._file_progress_lock = threading.Lock()
+
+    def get_file_progress(self) -> dict:
+        with self._file_progress_lock:
+            return dict(self._file_progress)
 
     # ------------------------------------------------------------------
     # Connection
@@ -138,13 +145,16 @@ class BaseFTPWorker(QtCore.QThread):
         """
         Return list of (name, is_dir) for a remote directory.
         Tries MLSD first, falls back to LIST.
+        Names are always returned as plain basenames (some servers send full paths).
         """
         try:
-            return [
-                (name, attrs.get("type") == "dir")
-                for name, attrs in ftp.mlsd(path)
-                if name not in (".", "..")
-            ]
+            result = []
+            for name, attrs in ftp.mlsd(path):
+                name = name.rstrip("/").split("/")[-1]  # normalize to basename
+                if name in (".", "..") or not name:
+                    continue
+                result.append((name, "dir" in attrs.get("type", "").lower()))
+            return result
         except Exception:
             lines = []
             ftp.dir(path, lines.append)
@@ -154,7 +164,8 @@ class BaseFTPWorker(QtCore.QThread):
                 if len(parts) < 9:
                     continue
                 name = " ".join(parts[8:])
-                if name not in (".", ".."):
+                name = name.rstrip("/").split("/")[-1]  # normalize to basename
+                if name not in (".", "..") and name:
                     result.append((name, parts[0].startswith("d")))
             return result
 

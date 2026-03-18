@@ -76,13 +76,21 @@ _SIZE_UNITS = ["B", "KB", "MB", "GB", "TB"]
 
 
 def format_size(size: int) -> str:
-    """Format file size into a human-readable string."""
+    """Format file size into a human-readable string.
+
+    Upgrades to the next unit only when the value there would be >= 0.1,
+    so e.g. 99 KB stays as '99.0 KB' but 103 KB becomes '0.1 MB'.
+    """
     if size is None or size < 0:
         return "0 B"
 
+    value = float(size)
     for unit in _SIZE_UNITS[:-1]:
-        if size < 1024:
-            return f"{size:.1f} {unit}"
-        size /= 1024
+        next_value = value / 1024
+        if next_value < 0.1:
+            if unit == "B":
+                return f"{int(value)} B"
+            return f"{value:.1f} {unit}"
+        value = next_value
 
-    return f"{size:.1f} {_SIZE_UNITS[-1]}"
+    return f"{value:.1f} {_SIZE_UNITS[-1]}"

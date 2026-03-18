@@ -1,0 +1,9 @@
+{
+    "enable": true,
+    "env": [
+        {
+            "TVT": "$HOUDINI_USER_PREF_DIR/packages/tevton_tools"
+        }
+    ],
+    "hpath": "$TVT"
+}

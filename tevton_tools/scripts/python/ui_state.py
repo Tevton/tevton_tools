@@ -1,5 +1,4 @@
 from PySide6 import QtWidgets, QtCore
-from typing import Optional
 
 
 class UIStateController:
@@ -97,6 +96,11 @@ class UIStateController:
             self.set_enabled(False, name)
 
         self._active_blocks.add(block_id)
+
+    def block_group(self, block_id: str, group_name: str):
+        """Block only the widgets belonging to a specific group, saving their state."""
+        names = tuple(self._groups.get(group_name, []))
+        self.block(block_id, *names)
 
     def unblock(self, block_id: str):
         """Unblock widgets, restoring their previous states."""

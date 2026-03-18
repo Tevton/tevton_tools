@@ -25,6 +25,7 @@ class FTPDownloadWorker(BaseTransferWorker):
     """
 
     overwrite_needed = QtCore.Signal(list)  # list of conflicting filenames
+    files_scanned = QtCore.Signal(list)    # list of (remote_file, local_dir, size)
     MAX_CONNECTIONS = 4
     SPEED_WINDOW = 5.0  # seconds for rolling speed average
 
@@ -45,7 +46,6 @@ class FTPDownloadWorker(BaseTransferWorker):
         self._download_lock = threading.Lock()
         self._errors: list = []
         self._log_queue: queue.Queue = queue.Queue()
-
     def set_overwrite(self, confirmed: bool):
         """Called from the main thread to unblock the worker after user confirms."""
         self._overwrite_confirmed = confirmed
@@ -97,6 +97,7 @@ class FTPDownloadWorker(BaseTransferWorker):
                 f"Found {len(entries)} files, total: {_format_size(self.total_bytes)}",
                 "info",
             )
+            self.files_scanned.emit(entries)
 
             # Phase 1.5 — conflict check.
             conflicts = [
@@ -188,6 +189,9 @@ class FTPDownloadWorker(BaseTransferWorker):
                     filename = os.path.basename(remote_file)
                     local_path = os.path.join(local_target_dir, filename)
 
+                    with self._file_progress_lock:
+                        self._file_progress[remote_file] = 0
+
                     self._log_queue.put((f"Downloading: {remote_file}", "info"))
                     file_start = time.time()
                     fb = [0]  # per-file byte counter
@@ -195,11 +199,14 @@ class FTPDownloadWorker(BaseTransferWorker):
                     with open(local_path, "wb") as f:
                         ftp.retrbinary(
                             f"RETR {remote_file}",
-                            lambda data, _f=f, _fb=fb: self._write_chunk(
-                                data, _f, _fb
+                            lambda data, _f=f, _fb=fb, _fk=remote_file, _fs=file_size: self._write_chunk(
+                                data, _f, _fb, _fk, _fs
                             ),
                             blocksize=self.CHUNK_SIZE,
                         )
+
+                    with self._file_progress_lock:
+                        self._file_progress[remote_file] = 100
 
                     elapsed = time.time() - file_start
                     speed = (fb[0] / elapsed / 1024 / 1024) if elapsed > 0 else 0
@@ -229,12 +236,16 @@ class FTPDownloadWorker(BaseTransferWorker):
                 except Exception:
                     pass
 
-    def _write_chunk(self, data, f, fb):
+    def _write_chunk(self, data, f, fb, file_key, file_size):
         """Write chunk and update byte counters only. No signal emission — unsafe from raw threads."""
         f.write(data)
         n = len(data)
         self._transferred += n
         fb[0] += n
+        if file_size > 0:
+            pct = min(int(fb[0] / file_size * 100), 99)
+            with self._file_progress_lock:
+                self._file_progress[file_key] = pct
 
     # ------------------------------------------------------------------
     # Stats — called from QTimer on main thread (safe signal emission)
@@ -300,7 +311,16 @@ class FTPDownloadWorker(BaseTransferWorker):
         except Exception:
             pass
 
-        # It's a directory — walk it recursively.
+        # ftp.size() failed — confirm it's truly a directory by trying cwd.
+        try:
+            ftp.cwd(remote_path)
+            ftp.cwd("/")  # restore to root
+        except Exception:
+            # Can't cd into it — treat as a file with unknown size.
+            entries.append((remote_path, local_base, 0))
+            return
+
+        # Confirmed directory — walk it recursively.
         dir_name = remote_path.rstrip("/").split("/")[-1]
         local_mirror = os.path.join(local_base, dir_name)
 
@@ -308,6 +328,11 @@ class FTPDownloadWorker(BaseTransferWorker):
             children = self._list_dir(ftp, remote_path)
         except Exception as e:
             self.log(f"Cannot list {remote_path}: {e}", "warning")
+            entries.append((remote_path, local_base, 0))
+            return
+
+        if not children:
+            entries.append((remote_path, local_base, 0))
             return
 
         for name, is_dir, size in children:

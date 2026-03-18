@@ -44,6 +44,7 @@ class FTPManager(QtCore.QObject):
     busy_changed = QtCore.Signal(bool)
     transfer_stats = QtCore.Signal(float, float, float, float)
     overwrite_needed = QtCore.Signal(list)  # list of conflicting filenames
+    files_scanned = QtCore.Signal(list)    # expanded file list from scan phase
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -136,7 +137,7 @@ class FTPManager(QtCore.QObject):
         """Immediately abort any ongoing connection attempt."""
         if self._current_worker and self._current_worker.isRunning():
             if isinstance(self._current_worker, FTPConnectWorker):
-                self._current_worker.stop()   # closes socket → unblocks ftp.connect()
+                self._current_worker.stop()  # closes socket → unblocks ftp.connect()
                 self._current_worker.wait(500)
                 self._current_worker = None
                 self.busy_changed.emit(False)
@@ -148,7 +149,8 @@ class FTPManager(QtCore.QObject):
     # File operations
     # ------------------------------------------------------------------
 
-    def list_files(self, path: str, callback: Callable = None) -> bool:
+    def list_files(self, path: str, callback: Callable = None,
+                   fail_callback: Callable = None) -> bool:
         if not self._guard_operation():
             return False
 
@@ -156,10 +158,12 @@ class FTPManager(QtCore.QObject):
         worker.files_ready.connect(self.files_ready)
         if callback:
             worker.files_ready.connect(callback)
+        if fail_callback:
+            worker.finished.connect(fail_callback)
         self._run_worker(worker)
         return True
 
-    def upload_files(self, local_paths: List[str], remote_dir: str) -> bool:
+    def upload_files(self, entries: List[str]) -> bool:
         """
         Upload files and/or folders to remote_dir, mirroring directory structure.
         If upload already in progress, adds items to the live queue instead.
@@ -167,7 +171,6 @@ class FTPManager(QtCore.QObject):
         if not self._guard_operation():
             return False
 
-        entries = _expand_paths(local_paths, remote_dir)
         if not entries:
             self.status.emit("warning", "No valid files to upload.")
             return False
@@ -243,7 +246,9 @@ class FTPManager(QtCore.QObject):
         if hasattr(self._current_worker, "set_overwrite"):
             self._current_worker.set_overwrite(confirmed)
 
-    def rename_file(self, old_path: str, new_path: str, callback: Callable = None) -> bool:
+    def rename_file(
+        self, old_path: str, new_path: str, callback: Callable = None
+    ) -> bool:
         if not self._guard_operation():
             return False
 
@@ -292,6 +297,8 @@ class FTPManager(QtCore.QObject):
             worker.transfer_stats.connect(self.transfer_stats)
         if hasattr(worker, "overwrite_needed"):
             worker.overwrite_needed.connect(self.overwrite_needed)
+        if hasattr(worker, "files_scanned"):
+            worker.files_scanned.connect(self.files_scanned)
         worker.finished.connect(
             lambda ok, msg, w=worker: self._on_operation_finished(ok, msg, w)
         )
@@ -308,7 +315,11 @@ class FTPManager(QtCore.QObject):
     def _on_operation_finished(self, success: bool, message: str, worker=None):
         """Completion handler for file operation workers."""
         if worker is not None and worker is not self._current_worker:
-            return  # Stale signal from cancelled worker
+            # A new worker was already started inside an operation_finished handler
+            # (e.g. sequential move queue). Emit the result but don't clear
+            # _current_worker or emit busy_changed(False) — the new worker is active.
+            self.operation_finished.emit(success, message)
+            return
         self.operation_finished.emit(success, message)
         self._current_worker = None
         self._upload_queue = None
@@ -390,30 +401,3 @@ class FTPManager(QtCore.QObject):
         self.status.emit("info", msg)
         self._upload_done_event.set()
         return True
-
-
-# ------------------------------------------------------------------
-# Path helpers
-# ------------------------------------------------------------------
-
-
-def _expand_paths(local_paths: List[str], remote_dir: str) -> List[tuple]:
-    """
-    Expand a mixed list of files and directories into (local_file, remote_target_dir)
-    tuples, mirroring directory structure under remote_dir.
-    """
-    entries = []
-    remote_dir = remote_dir.rstrip("/")
-
-    for path in local_paths:
-        if os.path.isfile(path):
-            entries.append((path, remote_dir))
-        elif os.path.isdir(path):
-            base = os.path.dirname(path.rstrip("/\\"))
-            for root, _dirs, files in os.walk(path):
-                rel = os.path.relpath(root, base).replace("\\", "/")
-                target = f"{remote_dir}/{rel}".replace("//", "/")
-                for filename in files:
-                    entries.append((os.path.join(root, filename), target))
-
-    return entries

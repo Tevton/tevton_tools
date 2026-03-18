@@ -1,5 +1,6 @@
 import hou
 import os
+import re
 import sys
 from pathlib import Path
 from PySide6 import QtWidgets, QtCore
@@ -305,6 +306,25 @@ hou.hipFile.save(r"{path}")
     return True
 
 
+def open_as_new_session(hip_path: str):
+    """
+    Open a .hip file in a new Houdini window (cross-platform)
+    """
+    import subprocess
+
+    hfs_path = os.environ.get("HFS", "")
+
+    if os.name == "nt":
+        exe = str(Path(hfs_path) / "bin" / "houdini.exe") if hfs_path else "houdini.exe"
+        subprocess.Popen(
+            [exe, hip_path],
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
+        )
+    else:
+        exe = str(Path(hfs_path) / "bin" / "houdini") if hfs_path else "houdini"
+        subprocess.Popen([exe, hip_path], start_new_session=True)
+
+
 def get_user_tool_dir():
     """
     Creates necessary subfolders and empty JSON file to store project data, if they don't exist.
@@ -368,6 +388,40 @@ def set_connection_status(widget, state):
     # Update status text
     if hasattr(widget, "con_status") and widget.con_status:
         widget.con_status.setText(texts.get(state, "Disconnected"))
+
+
+def extract_trailing_version(name: str) -> int:
+    """Extract the trailing number from a name string.
+    Examples: 'v001' -> 1, '02' -> 2, 'snow_v7' -> 7, 'fire' -> -1
+    """
+    m = re.search(r"(\d+)$", name)
+    return int(m.group(1)) if m else -1
+
+
+def latest_version_dir(dirs) -> "Path | None":
+    """Return the Path with the highest trailing version number from an iterable of dirs."""
+    dirs = list(dirs)
+    if not dirs:
+        return None
+    return max(dirs, key=lambda d: (extract_trailing_version(d.name), d.name))
+
+
+def latest_version_files(files) -> list:
+    """Return one Path per base name (highest trailing version) from an iterable of file Paths.
+    Groups by stem with trailing version token stripped.
+    Example: comp_v001.nk + comp_v002.nk -> [comp_v002.nk]
+    """
+    groups = {}
+    for p in files:
+        key = (
+            re.sub(r"[_.]?v?\d+$", "", p.stem, flags=re.IGNORECASE).rstrip("_.")
+            + p.suffix
+        )
+        if key not in groups or extract_trailing_version(
+            p.stem
+        ) > extract_trailing_version(groups[key].stem):
+            groups[key] = p
+    return list(groups.values())
 
 
 class ConnectionAnimator(QtCore.QObject):
