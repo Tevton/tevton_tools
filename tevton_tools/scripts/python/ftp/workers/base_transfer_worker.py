@@ -14,6 +14,6 @@ class BaseTransferWorker(BaseFTPWorker):
     # (speed_mbps: float, transferred_bytes: float, total_bytes: float, eta_seconds: float)
     transfer_stats = Signal(float, float, float, float)
 
-    def __init__(self, host, user, password, port):
-        super().__init__(host, user, password, port)
+    def __init__(self, host, user, password, port, use_tls=False):
+        super().__init__(host, user, password, port, use_tls=use_tls)
         self.total_bytes = 0

@@ -14,8 +14,8 @@ class FTPDeleteWorker(BaseFTPWorker):
 
     files_scanned = QtCore.Signal(list)  # [(remote_path, is_dir), ...]
 
-    def __init__(self, host, user, password, port, remote_files):
-        super().__init__(host, user, password, port)
+    def __init__(self, host, user, password, port, remote_files, use_tls=False):
+        super().__init__(host, user, password, port, use_tls=use_tls)
         self.remote_files = remote_files or []
 
     def run(self):

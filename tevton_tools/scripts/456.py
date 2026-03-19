@@ -2,6 +2,9 @@ import hou
 import os
 from pathlib import Path
 import pipeline.projects_store as projects_store  # type: ignore
+import tvt_utils  # type: ignore
+
+tvt_utils.install_qt_message_handler()
 
 
 def get_projects_data_path():

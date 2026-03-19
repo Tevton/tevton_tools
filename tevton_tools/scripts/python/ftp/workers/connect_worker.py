@@ -12,12 +12,14 @@ class FTPConnectWorker(BaseFTPWorker):
 
     connection_valid = QtCore.Signal(dict)
 
-    def __init__(self, host: str, user: str, password: str, port: int = 21):
+    def __init__(self, host: str, user: str, password: str, port: int = 21,
+                 use_tls: bool = False):
         super().__init__(
             host=str(host) if host else "",
             user=str(user) if user else "",
             password=str(password) if password else "",
             port=int(port) if port else 21,
+            use_tls=use_tls,
         )
 
     def run(self):

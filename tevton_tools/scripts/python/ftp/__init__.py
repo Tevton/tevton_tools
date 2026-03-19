@@ -1,5 +1,3 @@
-__version__ = "1.0.0"
-
 from .manager import FTPManager
 from .ftp_utils import (
     get_ftp_settings,

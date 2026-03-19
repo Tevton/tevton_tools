@@ -202,11 +202,21 @@ class LocalPanel:
     # Deletion
     # ------------------------------------------------------------------
 
+    def _teardown_model(self):
+        """Detach and destroy the file model, releasing all QFileSystemWatcher handles."""
+        tree = self._win.local_tree
+        if tree:
+            tree.setModel(None)
+        if self.file_model:
+            self.file_model.deleteLater()
+            self.file_model = None
+        self._proxy = None
+
     def delete_files(self, paths: list):
         """Delete local files/directories with error reporting."""
         current_root = self.file_model.rootPath() if self.file_model else None
-        if current_root:
-            self.file_model.setRootPath("")
+        if self.file_model:
+            self._teardown_model()
 
         errors = []
         for path in paths:
@@ -220,7 +230,7 @@ class LocalPanel:
                 errors.append(f"{os.path.basename(path)}: {e}")
 
         if current_root:
-            self.file_model.setRootPath(current_root)
+            self.setup_model(current_root)
 
         if errors:
             self._win.log(f"Failed to delete: {'; '.join(errors)}", "error")

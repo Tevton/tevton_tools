@@ -37,8 +37,9 @@ class FTPUploadWorker(BaseTransferWorker):
         upload_queue: queue.Queue,
         done_event,
         total_bytes: int = 0,
+        use_tls=False,
     ):
-        super().__init__(host, user, password, port)
+        super().__init__(host, user, password, port, use_tls=use_tls)
         self._queue = upload_queue
         self._done_event = done_event
         self.total_bytes = total_bytes

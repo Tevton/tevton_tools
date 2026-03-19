@@ -981,9 +981,17 @@ class ShotFTPManager(QtWidgets.QMainWindow):
             if info and not info.get("is_parent"):
                 menu.addAction("Download").triggered.connect(self._download_selected)
                 menu.addAction("Copy").triggered.connect(self._copy_selected)
+                copy_url_action = menu.addAction("Copy URL")
+                copy_url_action.triggered.connect(
+                    lambda: self._copy_ftp_url(info.get("path", ""))
+                )
                 menu.addAction("Rename").triggered.connect(self._rename_selected)
                 menu.addAction("Delete").triggered.connect(self._delete_selected)
                 menu.addSeparator()
+        copy_dir_url_action = menu.addAction("Copy Directory URL")
+        copy_dir_url_action.triggered.connect(
+            lambda: self._copy_ftp_url(self.current_ftp_path)
+        )
         menu.addAction("Paste here").triggered.connect(self._paste_to_ftp)
         menu.addAction("New Folder").triggered.connect(self._on_new_folder_clicked)
         menu.exec(tree.viewport().mapToGlobal(pos))
@@ -1008,6 +1016,21 @@ class ShotFTPManager(QtWidgets.QMainWindow):
     # ──────────────────────────────────────────────────────────────────────
     # UTILITIES
     # ──────────────────────────────────────────────────────────────────────
+
+    def _copy_ftp_url(self, path: str):
+        """Build an FTP URL from current credentials + path and copy it to clipboard."""
+        creds = self.ftp_manager.credentials
+        if not creds or not creds.get("host"):
+            self.log("No FTP credentials available", "warning")
+            return
+        scheme = "ftpes" if creds.get("use_tls") else "ftp"
+        host = creds["host"]
+        port = creds.get("port", 21)
+        user = creds.get("user", "")
+        ftp_path = ("/" + path.lstrip("/")) if path else "/"
+        url = f"{scheme}://{user}@{host}:{port}{ftp_path}"
+        QtWidgets.QApplication.clipboard().setText(url)
+        self.log(f"URL copied: {url}", "info")
 
     def log(self, message: str, level: str = "info", skip_duplicates: bool = False):
         self._wm.log(self, message, level, skip_duplicates)

@@ -10,3 +10,5 @@ CUSTOM_OCIO_PATH = hou.text.expandString("$HOUDINI_USER_PREF_DIR/ocio")
 FTP_SHOT_PATH = "/OUT/FX/{shot_name}"
 FTP_SOURCE_PATH = "IN/{shot_name}"
 HIP_EXTENSIONS = [".hip", ".hipnc", ".hiplc"]
+
+VERSION = "v0.2.0"

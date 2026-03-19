@@ -1,12 +1,46 @@
 from pathlib import Path
+from urllib.parse import urlparse, unquote
 import json
 from config.config import PROJECTS_JSON_PATH
+
+_FTP_SCHEMES = {"ftp", "ftps", "ftpes"}
 
 
 class FTPConfigError(Exception):
     """FTP configuration error — invalid settings or missing project."""
 
     pass
+
+
+# -----------------------------------
+# URL parsing
+# -----------------------------------
+
+
+def parse_ftp_url(text: str):
+    """Parse an FTP URL like ftpes://user:password@host:port.
+
+    Returns dict with host, user, password, port, use_tls on success, or None.
+    """
+    if not text or "://" not in text:
+        return None
+
+    scheme = text.split("://", 1)[0].lower()
+    if scheme not in _FTP_SCHEMES:
+        return None
+
+    parsed = urlparse(text)
+    host = parsed.hostname
+    if not host:
+        return None
+
+    return {
+        "host": host,
+        "user": unquote(parsed.username or ""),
+        "password": unquote(parsed.password or ""),
+        "port": parsed.port or 21,
+        "use_tls": scheme in ("ftps", "ftpes"),
+    }
 
 
 # -----------------------------------
@@ -36,6 +70,7 @@ def get_ftp_settings(project_name: str) -> dict:
         "user": project.get("PROJECT_FTP_USER", ""),
         "password": project.get("PROJECT_FTP_PASSWORD", ""),
         "port": _parse_port(project.get("PROJECT_FTP_PORT"), project_name),
+        "use_tls": project.get("PROJECT_FTP_TLS", False),
     }
 
 
