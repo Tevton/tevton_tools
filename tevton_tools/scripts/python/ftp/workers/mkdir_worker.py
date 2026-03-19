@@ -4,8 +4,8 @@ from .base_worker import BaseFTPWorker
 class FTPMakeDirsWorker(BaseFTPWorker):
     """Creates directory trees on FTP server."""
 
-    def __init__(self, host, user, password, port, remote_dirs):
-        super().__init__(host, user, password, port)
+    def __init__(self, host, user, password, port, remote_dirs, use_tls=False):
+        super().__init__(host, user, password, port, use_tls=use_tls)
         self.remote_dirs = remote_dirs or []
 
     def run(self):

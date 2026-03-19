@@ -334,7 +334,7 @@
                  <string>Append latest .nk and .mov file</string>
                 </property>
                 <property name="checked">
-                 <bool>true</bool>
+                 <bool>false</bool>
                 </property>
                 <property name="autoExclusive">
                  <bool>false</bool>

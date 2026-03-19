@@ -19,8 +19,8 @@ class FTPListWorker(BaseFTPWorker):
 
     files_ready = QtCore.Signal(list)
 
-    def __init__(self, host, user, password, port, path):
-        super().__init__(host, user, password, port)
+    def __init__(self, host, user, password, port, path, use_tls=False):
+        super().__init__(host, user, password, port, use_tls=use_tls)
         self.path = path
 
     def run(self):

@@ -1,6 +1,7 @@
+import ssl
 import threading
 from qt_shim import QtCore
-from ftplib import FTP
+from ftplib import FTP, FTP_TLS
 
 
 class BaseFTPWorker(QtCore.QThread):
@@ -19,12 +20,13 @@ class BaseFTPWorker(QtCore.QThread):
     status = QtCore.Signal(str, str)  # level, message — for non-fatal per-file warnings
     finished = QtCore.Signal(bool, str)  # success, message — sole completion signal
 
-    def __init__(self, host=None, user=None, password=None, port=21):
+    def __init__(self, host=None, user=None, password=None, port=21, use_tls=False):
         super().__init__()
         self.host = host
         self.user = user
         self.password = password
         self.port = port
+        self.use_tls = use_tls
         self.ftp = None
         self._is_running = True
         self._finished_emitted = False
@@ -42,9 +44,18 @@ class BaseFTPWorker(QtCore.QThread):
 
     def _make_connection(self) -> FTP:
         """Open and return a new FTP connection (does not store in self.ftp)."""
-        ftp = FTP()
-        ftp.connect(self.host, self.port, timeout=10)
-        ftp.login(self.user, self.password)
+        if self.use_tls:
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            ftp = FTP_TLS(context=ctx)
+            ftp.connect(self.host, self.port, timeout=10)
+            ftp.login(self.user, self.password)
+            ftp.prot_p()
+        else:
+            ftp = FTP()
+            ftp.connect(self.host, self.port, timeout=10)
+            ftp.login(self.user, self.password)
         ftp.set_pasv(True)
         return ftp
 

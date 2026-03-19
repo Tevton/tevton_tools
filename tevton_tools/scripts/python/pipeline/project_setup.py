@@ -10,6 +10,7 @@ import pipeline.projects_store as projects_store
 from ui_state import UIStateController
 from config.config import CUSTOM_OCIO_PATH
 from ftp import FTPManager
+from ftp.ftp_utils import parse_ftp_url
 from pipeline.window_manager import get_window_manager
 
 
@@ -36,6 +37,7 @@ class ProjectSetup(QtWidgets.QMainWindow):
         self.default_ocio = os.path.basename(hou.getenv("OCIO"))
         self.selected_folder = ""
         self.selected_ocio_profile = ""
+        self._use_tls = False
 
         self._wm = get_window_manager()
         self._ui_state = UIStateController()
@@ -146,9 +148,7 @@ class ProjectSetup(QtWidgets.QMainWindow):
         self.project_name.textChanged.connect(self._update_save_button)
         self.project_folders.textChanged.connect(self._update_save_button)
 
-        self.ftp_host.textChanged.connect(
-            lambda txt: self.ftp_host.setText(txt.strip())
-        )
+        self.ftp_host.textChanged.connect(self._on_host_text_changed)
         self.ftp_user.textChanged.connect(
             lambda txt: self.ftp_user.setText(txt.strip())
         )
@@ -190,7 +190,7 @@ class ProjectSetup(QtWidgets.QMainWindow):
             self.project_folders, "-_/", True
         )
         self.validate_host = tvt_utils.create_field_validator(
-            self.ftp_host, allowed_symbols=".-", allow_empty=True
+            self.ftp_host, allowed_symbols=".-:/@", allow_empty=True
         )
         self.validate_user = tvt_utils.create_field_validator(
             self.ftp_user, allowed_symbols=".", allow_empty=True
@@ -332,6 +332,7 @@ class ProjectSetup(QtWidgets.QMainWindow):
         self.ftp_port.setText(proj.get("PROJECT_FTP_PORT", ""))
         self.ftp_user.setText(proj.get("PROJECT_FTP_USER", ""))
         self.ftp_pw.setText(proj.get("PROJECT_FTP_PASSWORD", ""))
+        self._use_tls = proj.get("PROJECT_FTP_TLS", False)
 
         ocio_filename = Path(proj.get("OCIO", "")).name
         index = self.ocio_profile.findText(ocio_filename)
@@ -406,6 +407,7 @@ class ProjectSetup(QtWidgets.QMainWindow):
             "PROJECT_FTP_PORT": self.ftp_port.text(),
             "PROJECT_FTP_USER": self.ftp_user.text(),
             "PROJECT_FTP_PASSWORD": self.ftp_pw.text(),
+            "PROJECT_FTP_TLS": self._use_tls,
             "OCIO": ocio_path,
         }
 
@@ -457,6 +459,33 @@ class ProjectSetup(QtWidgets.QMainWindow):
     # FTP
     # =====================================================
 
+    def _on_host_text_changed(self, text):
+        """Intercept FTP URL paste and auto-fill all credential fields."""
+        stripped = text.strip()
+        result = parse_ftp_url(stripped)
+        if result is None:
+            # Normal hostname — just strip whitespace
+            if stripped != text:
+                self.ftp_host.setText(stripped)
+            return
+
+        # Block signals to prevent cascading validators/handlers
+        for w in (self.ftp_host, self.ftp_user, self.ftp_pw, self.ftp_port):
+            w.blockSignals(True)
+
+        self.ftp_host.setText(result["host"])
+        self.ftp_user.setText(result["user"])
+        self.ftp_pw.setText(result["password"])
+        self.ftp_port.setText(str(result["port"]))
+        self._use_tls = result["use_tls"]
+
+        for w in (self.ftp_host, self.ftp_user, self.ftp_pw, self.ftp_port):
+            w.blockSignals(False)
+
+        # Trigger validators manually after unblock
+        self.validate_host()
+        self.validate_user()
+
     def connect_to_ftp(self):
         """Read credentials from form fields and run a one-shot connection check."""
         if self.ftp_manager.is_busy():
@@ -489,7 +518,7 @@ class ProjectSetup(QtWidgets.QMainWindow):
             )
             return
 
-        self.ftp_manager.set_credentials(host, user, password, port)
+        self.ftp_manager.set_credentials(host, user, password, port, use_tls=self._use_tls)
         self.ftp_manager.check_connection()
 
     def _on_connection_checked(self, success: bool, message: str):

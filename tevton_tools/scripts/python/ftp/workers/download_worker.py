@@ -29,8 +29,8 @@ class FTPDownloadWorker(BaseTransferWorker):
     MAX_CONNECTIONS = 4
     SPEED_WINDOW = 5.0  # seconds for rolling speed average
 
-    def __init__(self, host, user, password, port, remote_paths, local_dir):
-        super().__init__(host, user, password, port)
+    def __init__(self, host, user, password, port, remote_paths, local_dir, use_tls=False):
+        super().__init__(host, user, password, port, use_tls=use_tls)
         self.remote_paths = remote_paths or []
         self.local_dir = local_dir
         self._overwrite_event = threading.Event()

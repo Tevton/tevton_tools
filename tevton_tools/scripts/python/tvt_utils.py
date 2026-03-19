@@ -5,6 +5,23 @@ import sys
 from pathlib import Path
 from qt_shim import QtWidgets, QtCore
 
+_QT_MSG_SUPPRESSED = ("QFileSystemWatcher",)
+
+
+def install_qt_message_handler():
+    """Suppress noisy Qt warnings (e.g. QFileSystemWatcher on deleted dirs).
+
+    Chains to the previously installed handler so all other messages keep
+    their normal routing (Houdini's own handler stays intact).
+    """
+    def _handler(msg_type, context, message, _prev=QtCore.qInstallMessageHandler(None)):
+        if any(s in message for s in _QT_MSG_SUPPRESSED):
+            return
+        if _prev is not None:
+            _prev(msg_type, context, message)
+
+    QtCore.qInstallMessageHandler(_handler)
+
 
 def reload_packages():
     """

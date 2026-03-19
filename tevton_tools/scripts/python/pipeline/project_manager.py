@@ -9,7 +9,7 @@ from pipeline.shot_setup import ShotSetup, ShotMode
 from pipeline.file_setup import FileSetup, FileMode
 from pipeline.shot_ftp_manager import ShotFTPManager
 from pipeline.window_manager import get_window_manager
-from config.config import HIP_EXTENSIONS
+from config.config import HIP_EXTENSIONS, VERSION
 
 
 class ProjectManager(QtWidgets.QMainWindow):
@@ -109,6 +109,8 @@ class ProjectManager(QtWidgets.QMainWindow):
         self.open_project_folder_button = self.ui.findChild(
             QtWidgets.QPushButton, "pb_open_project_folder"
         )
+        self.github_logo = self.ui.findChild(QtWidgets.QLabel, "lb_github_logo")
+
         # Shots
         self.shots_text = self.ui.findChild(QtWidgets.QLabel, "lb_shots")
         self.shot_list = self.ui.findChild(QtWidgets.QListWidget, "lw_shot_list")
@@ -141,7 +143,7 @@ class ProjectManager(QtWidgets.QMainWindow):
         self.show_all_check = self.ui.findChild(QtWidgets.QCheckBox, "cb_show_all")
 
     def _setup_ui(self):
-        self.setWindowTitle("Project Manager")
+        self.setWindowTitle(f"Project Manager - {VERSION}")
         self.project_list.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
         self.shot_list.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
         self.file_list.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
@@ -159,6 +161,13 @@ class ProjectManager(QtWidgets.QMainWindow):
         self._f2_shortcut.activated.connect(self._edit_selected)
         self._del_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Delete"), self.ui)
         self._del_shortcut.activated.connect(self._delete_focused)
+
+        if self.github_logo:
+            svg_path = hou.text.expandString("$TVT/icons/GitHub_Lockup_White.svg")
+            self.github_logo.setPixmap(QtGui.QPixmap(svg_path))
+            self.github_logo.setScaledContents(True)
+            self.github_logo.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+            self.github_logo.installEventFilter(self)
 
     def _connect_signals(self):
         # Lists
@@ -207,6 +216,14 @@ class ProjectManager(QtWidgets.QMainWindow):
         self.show_all_check.stateChanged.connect(self.load_file_list)
 
         self._setup_context_menus()
+
+    def eventFilter(self, obj, event):
+        if obj is self.github_logo and event.type() == QtCore.QEvent.MouseButtonRelease:
+            QtGui.QDesktopServices.openUrl(
+                QtCore.QUrl("https://github.com/Tevton/tevton_tools")
+            )
+            return True
+        return super().eventFilter(obj, event)
 
     def _setup_context_menus(self):
         self.project_list.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
@@ -919,6 +936,14 @@ class ProjectManager(QtWidgets.QMainWindow):
         self.load_shot_list()
         self.file_list.clear()
         self._update_button_states()
+
+    # =====================================================
+    # CLEANUP
+    # =====================================================
+
+    def closeEvent(self, event):
+        self._wm.close_all_child_windows(self)
+        super().closeEvent(event)
 
 
 if __name__ == "__main__":

@@ -62,6 +62,10 @@ class FTPManager(QtCore.QObject):
     # State
     # ------------------------------------------------------------------
 
+    @property
+    def credentials(self) -> dict:
+        return self._creds.copy()
+
     def is_connected(self) -> bool:
         return self._connected and bool(self._creds)
 
@@ -97,9 +101,11 @@ class FTPManager(QtCore.QObject):
 
         self.status.emit("info", f"Project set: {project_name}")
 
-    def set_credentials(self, host: str, user: str, password: str, port: int = 21):
+    def set_credentials(self, host: str, user: str, password: str, port: int = 21,
+                        use_tls: bool = False):
         """Set FTP credentials directly."""
-        self._creds = {"host": host, "user": user, "password": password, "port": port}
+        self._creds = {"host": host, "user": user, "password": password, "port": port,
+                       "use_tls": use_tls}
 
     # ------------------------------------------------------------------
     # Connection
@@ -337,6 +343,9 @@ class FTPManager(QtCore.QObject):
     def _on_connect_finished(self, success: bool, message: str):
         if not success:
             self.status.emit("error", message)
+            # Force emission of connection_changed(False) even if _connected was
+            # already False (initial connection failure — reconnect btn stays disabled).
+            self._connected = True
             self._set_connected(False)
 
     def _on_check_finished(self, success: bool, message: str):
