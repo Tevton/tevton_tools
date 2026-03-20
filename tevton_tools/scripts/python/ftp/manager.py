@@ -1,6 +1,7 @@
 import os
 import queue
 import threading
+import weakref
 from qt_shim import QtCore
 from typing import Optional, List, Callable
 
@@ -285,9 +286,12 @@ class FTPManager(QtCore.QObject):
         self.stop_current_operation()
         self._current_worker = worker
         self.busy_changed.emit(True)
-        worker.finished.connect(
-            lambda ok, msg, w=worker: self._on_connect_worker_done(ok, msg, w)
-        )
+        _ref = weakref.ref(self)
+        def _on_done(ok, msg, w=worker):
+            mgr = _ref()
+            if mgr is not None:
+                mgr._on_connect_worker_done(ok, msg, w)
+        worker.finished.connect(_on_done)
         worker.start()
 
     def _run_worker(self, worker: QtCore.QThread):
@@ -305,9 +309,12 @@ class FTPManager(QtCore.QObject):
             worker.overwrite_needed.connect(self.overwrite_needed)
         if hasattr(worker, "files_scanned"):
             worker.files_scanned.connect(self.files_scanned)
-        worker.finished.connect(
-            lambda ok, msg, w=worker: self._on_operation_finished(ok, msg, w)
-        )
+        _ref = weakref.ref(self)
+        def _on_done(ok, msg, w=worker):
+            mgr = _ref()
+            if mgr is not None:
+                mgr._on_operation_finished(ok, msg, w)
+        worker.finished.connect(_on_done)
 
         worker.start()
 

@@ -110,6 +110,7 @@ class ProjectManager(QtWidgets.QMainWindow):
             QtWidgets.QPushButton, "pb_open_project_folder"
         )
         self.github_logo = self.ui.findChild(QtWidgets.QLabel, "lb_github_logo")
+        self.telegram_logo = self.ui.findChild(QtWidgets.QLabel, "lb_telegram_logo")
 
         # Shots
         self.shots_text = self.ui.findChild(QtWidgets.QLabel, "lb_shots")
@@ -163,11 +164,18 @@ class ProjectManager(QtWidgets.QMainWindow):
         self._del_shortcut.activated.connect(self._delete_focused)
 
         if self.github_logo:
-            svg_path = hou.text.expandString("$TVT/icons/GitHub_Lockup_White.svg")
+            svg_path = hou.text.expandString("$TVT/icons/GitHub_Invertocat_White.svg")
             self.github_logo.setPixmap(QtGui.QPixmap(svg_path))
             self.github_logo.setScaledContents(True)
             self.github_logo.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
             self.github_logo.installEventFilter(self)
+
+        if self.telegram_logo:
+            svg_path = hou.text.expandString("$TVT/icons/telegram-logo.svg")
+            self.telegram_logo.setPixmap(QtGui.QPixmap(svg_path))
+            self.telegram_logo.setScaledContents(True)
+            self.telegram_logo.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+            self.telegram_logo.installEventFilter(self)
 
     def _connect_signals(self):
         # Lists
@@ -222,6 +230,12 @@ class ProjectManager(QtWidgets.QMainWindow):
             QtGui.QDesktopServices.openUrl(
                 QtCore.QUrl("https://github.com/Tevton/tevton_tools")
             )
+            return True
+        if (
+            obj is self.telegram_logo
+            and event.type() == QtCore.QEvent.MouseButtonRelease
+        ):
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl("https://t.me/dmitrybykov3d"))
             return True
         return super().eventFilter(obj, event)
 
