@@ -51,8 +51,5 @@ A dual-panel file transfer window (FTP remote on the left, local filesystem on t
 ### Increment Save
 Saves the current .hip file with an automatically incremented version number (e.g. `scene_v001.hip` → `scene_v002.hip`).
 
-### Render Nodes Setup
-Find null nodes inside selected nodes with specified prefix and create SOP Geometry node for each node found with prefix.
-
-### SOP Nodes to Solaris
-Converts selected SOP import references into Solaris LOP layer nodes for USD-based workflows.
+### Render Nodes Manager
+Scans selected geo nodes for null nodes with a specified prefix and creates render geometry nodes in /obj. Optionally creates chained SOP Import nodes in /stage for Solaris workflows. Auto-detects mode based on selection — select source nodes to create render nodes, or select existing render nodes to create SOP imports only.
