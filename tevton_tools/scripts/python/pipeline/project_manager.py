@@ -962,7 +962,6 @@ class ProjectManager(QtWidgets.QMainWindow):
             if not self.has_shot_selected:
                 return
             path = path / "shots" / self.current_shot_name
-
         tvt_utils.open_file_or_folder(str(path))
 
     def _on_item_clicked(self, index):

@@ -262,7 +262,10 @@ def open_file_or_folder(path, file_type=None):
         elif system == "Darwin":
             subprocess.Popen(["open", path])
         elif system == "Linux":
-            subprocess.Popen(["xdg-open", path])
+            env = os.environ.copy()
+            env.pop("PYTHONHOME", None)
+            env.pop("PYTHONPATH", None)
+            subprocess.Popen(["xdg-open", path], env=env, start_new_session=True)
         else:
             hou.ui.displayMessage(
                 f"Unsupported operating system: {system}",

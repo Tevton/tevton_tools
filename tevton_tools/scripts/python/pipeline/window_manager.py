@@ -1,3 +1,4 @@
+import os
 import hou
 import weakref
 from datetime import datetime
@@ -106,6 +107,20 @@ class WindowManager:
 
         # Create new window instance
         win = window_class(parent=parent, **kwargs)
+
+        # On Linux, Qt.Tool sets _NET_WM_WINDOW_TYPE_UTILITY — the closest
+        # equivalent to Windows' owned-window model. Keeps the window above
+        # its parent (Houdini) without being globally on top.
+        if os.name == "posix":
+            win.setWindowFlag(QtCore.Qt.Tool, True)
+            # Set transient parent to the actual parent pipeline window
+            # so the WM stacks child above parent. Uses setTransientParent
+            # (not setParent) to avoid Qt parent-child cascade issues
+            # (e.g. parent.setEnabled(False) disabling the child).
+            if parent is not None and parent is not hou.qt.mainWindow():
+                win.winId()  # force QWindow creation
+                parent.winId()
+                win.windowHandle().setTransientParent(parent.windowHandle())
 
         # Center the window based on parameter
         if centering == "screen":
@@ -334,7 +349,9 @@ class WindowManager:
 
         if window_id not in self._log_widgets:
             print(f"[{level.upper()}] {message}")
-            self._write_to_log_file(f"[{level.upper()}] [{datetime.now().strftime('%H:%M:%S')}] {message}\n")
+            self._write_to_log_file(
+                f"[{level.upper()}] [{datetime.now().strftime('%H:%M:%S')}] {message}\n"
+            )
             return
 
         log_widget_ref = self._log_widgets[window_id]

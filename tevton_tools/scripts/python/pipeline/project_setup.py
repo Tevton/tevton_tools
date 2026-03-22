@@ -4,7 +4,6 @@ from enum import Enum
 from pathlib import Path
 from shutil import copy
 from qt_shim import QtCore, QtUiTools, QtWidgets, QtGui
-
 import tvt_utils
 import pipeline.projects_store as projects_store
 from ui_state import UIStateController
@@ -220,8 +219,8 @@ class ProjectSetup(QtWidgets.QMainWindow):
     def _select_directory(self):
         """Open directory picker and unlock inputs on valid selection."""
         start_folder = hou.text.expandString("$HIP")
-        selected = hou.ui.selectFile(
-            start_directory=start_folder, file_type=hou.fileType.Directory
+        selected = QtWidgets.QFileDialog.getExistingDirectory(
+            self, "Select Project Location", start_folder
         )
 
         if not selected or not tvt_utils.is_valid_path(selected):
@@ -518,7 +517,9 @@ class ProjectSetup(QtWidgets.QMainWindow):
             )
             return
 
-        self.ftp_manager.set_credentials(host, user, password, port, use_tls=self._use_tls)
+        self.ftp_manager.set_credentials(
+            host, user, password, port, use_tls=self._use_tls
+        )
         self.ftp_manager.check_connection()
 
     def _on_connection_checked(self, success: bool, message: str):
