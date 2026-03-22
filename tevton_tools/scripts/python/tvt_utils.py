@@ -14,6 +14,7 @@ def install_qt_message_handler():
     Chains to the previously installed handler so all other messages keep
     their normal routing (Houdini's own handler stays intact).
     """
+
     def _handler(msg_type, context, message, _prev=QtCore.qInstallMessageHandler(None)):
         if any(s in message for s in _QT_MSG_SUPPRESSED):
             return
@@ -188,7 +189,9 @@ def load_svg_icon(path: str, color: str = "#ffffff", size: int = 32) -> "QtGui.Q
     pixmap = QtGui.QPixmap(resolved)
     if pixmap.isNull():
         return QtGui.QIcon()
-    pixmap = pixmap.scaled(size, size, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+    pixmap = pixmap.scaled(
+        size, size, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation
+    )
 
     # Paint solid color using SourceIn — only affects non-transparent pixels
     painter = QtGui.QPainter(pixmap)
@@ -352,7 +355,8 @@ def open_as_new_session(hip_path: str):
         exe = str(Path(hfs_path) / "bin" / "houdini.exe") if hfs_path else "houdini.exe"
         subprocess.Popen(
             [exe, hip_path],
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+            | subprocess.DETACHED_PROCESS,
         )
     else:
         exe = str(Path(hfs_path) / "bin" / "houdini") if hfs_path else "houdini"
@@ -367,7 +371,7 @@ def get_user_tool_dir():
     if os.name == "nt":
         tool_dir = Path(os.getenv("APPDATA")) / "TVT"
     else:
-        tool_dir = Path.home() / ".tvt" / "TVT"
+        tool_dir = Path.home() / ".tvt"
 
     for f in ["config", "logs", "cache", "temp"]:
         (tool_dir / f).mkdir(parents=True, exist_ok=True)
