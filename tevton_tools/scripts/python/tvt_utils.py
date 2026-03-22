@@ -254,6 +254,45 @@ def open_file_or_folder(path, file_type=None):
             return
         else:
             return
+
+    if file_type == ".nk":
+        nuke_exe = None
+        if platform.system() == "Windows":
+            try:
+                import winreg
+                with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r".nk") as k:
+                    prog_id, _ = winreg.QueryValueEx(k, "")
+                shell_path = rf"{prog_id}\shell"
+                with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, shell_path) as sk:
+                    action = winreg.EnumKey(sk, 0)
+                with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, rf"{shell_path}\{action}\command") as ck:
+                    cmd, _ = winreg.QueryValueEx(ck, "")
+                nuke_exe = cmd.split('"')[1]
+            except Exception:
+                pass
+        if nuke_exe:
+            nuke_dir = str(Path(nuke_exe).parent)
+            clean_vars = ("SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "TEMP", "TMP",
+                          "USERPROFILE", "APPDATA", "LOCALAPPDATA", "USERNAME",
+                          "COMPUTERNAME", "HOMEDRIVE", "HOMEPATH", "PUBLIC",
+                          "PROGRAMFILES", "PROGRAMFILES(X86)", "COMMONPROGRAMFILES")
+            env = {k: os.environ[k] for k in clean_vars if k in os.environ}
+            env["PATH"] = nuke_dir + os.pathsep + os.environ.get("SYSTEMROOT", "") + r"\system32"
+            subprocess.Popen(
+                [nuke_exe, "--nukex", path],
+                cwd=nuke_dir,
+                env=env,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                | subprocess.DETACHED_PROCESS
+                | subprocess.CREATE_NO_WINDOW,
+            )
+        else:
+            env = os.environ.copy()
+            env.pop("PYTHONHOME", None)
+            env.pop("PYTHONPATH", None)
+            subprocess.Popen(["xdg-open", path], env=env, start_new_session=True)
+        return
+
     try:
         system = platform.system()
 

@@ -104,9 +104,14 @@ class ProjectManager(QtWidgets.QMainWindow):
             super().paint(painter, option, index)
 
     _SHOT_STATUS_STYLE = {
-        "pause":       ("$TVT/icons/pause.svg",       "#2a2a2a", "On Pause",    "#aaaaaa"),
-        "in_progress": ("$TVT/icons/auto-apply.svg",  "#48331F", "In Progress", "#f0a040"),
-        "done":        ("$TVT/icons/check-circle.svg", "#2b372b", "Done",        "#4caf50"),
+        "pause": ("$TVT/icons/pause.svg", "#2a2a2a", "On Pause", "#aaaaaa"),
+        "in_progress": (
+            "$TVT/icons/auto-apply.svg",
+            "#4D3124",
+            "In Progress",
+            "#f0a140",
+        ),
+        "done": ("$TVT/icons/check-circle.svg", "#2b372b", "Done", "#4caf50"),
     }
     _status_icon_cache: dict = {}
 
@@ -116,7 +121,9 @@ class ProjectManager(QtWidgets.QMainWindow):
             status, self._SHOT_STATUS_STYLE["pause"]
         )
         if status not in self._status_icon_cache:
-            self._status_icon_cache[status] = tvt_utils.load_svg_icon(icon_path, icon_color)
+            self._status_icon_cache[status] = tvt_utils.load_svg_icon(
+                icon_path, icon_color
+            )
         return (
             self._status_icon_cache[status],
             QtGui.QColor(color_hex),
@@ -197,8 +204,6 @@ class ProjectManager(QtWidgets.QMainWindow):
         self.project_list.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
         self.shot_list.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
         self.file_list.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
-        #!!! .nk filter right now not working
-        self.filter_nk_check.setEnabled(False)
 
         self.projects_text.setAlignment(QtCore.Qt.AlignCenter)
         self.shots_text.setAlignment(QtCore.Qt.AlignCenter)

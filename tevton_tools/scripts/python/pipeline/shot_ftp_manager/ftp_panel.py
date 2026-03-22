@@ -373,13 +373,16 @@ class FTPPanel:
             QtCore.QTimer.singleShot(0, self._prompt_create_shot_folder)
 
     def _prompt_create_shot_folder(self):
-        result = self._wm.show_buttons_dialog(
-            self._win,
-            "FTP Folder Missing",
-            f"Shot folder not found on FTP server!\nFTP path: {self._path}\n\nWould you like to create it now?",
-            buttons=[("Create Folder", True), ("Cancel", False)],
-            icon=QtWidgets.QMessageBox.Warning,
-        )
+        try:
+            result = self._wm.show_buttons_dialog(
+                self._win,
+                "FTP Folder Missing",
+                f"Shot folder not found on FTP server!\nFTP path: {self._path}\n\nWould you like to create it now?",
+                buttons=[("Create Folder", True), ("Cancel", False)],
+                icon=QtWidgets.QMessageBox.Warning,
+            )
+        except RuntimeError:
+            return  # window closed before deferred dialog could open
 
         if not result:
             return
