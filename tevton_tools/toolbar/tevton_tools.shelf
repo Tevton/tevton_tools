@@ -5,19 +5,12 @@
  Note, that two definitions of the same element are not allowed in
  a single file. -->
 
-  <tool name="Creating Render nodes for selected Nodes" label="RENDER nodes setup" icon="hicon:/SVGIcons.index?ROP_usdrender.svg">
-    <toolMenuContext name="network">
-      <contextOpType>Sop/null</contextOpType>
-    </toolMenuContext>
-    <script scriptType="python"><![CDATA[from tools import render_nodes_setup
+  <tool name="Render Nodes Manager" label="Render Nodes Manager" icon="hicon:/SVGIcons.index?ROP_usdrender.svg">
+    <script scriptType="python"><![CDATA[from tools.render_nodes_setup import RenderNodesManager
+from pipeline.window_manager import WindowManager
 
-render_nodes_setup.create_render_node_setup()]]></script>
-  </tool>
-
-  <tool name="Creating referenced sopimport nodes in Solaris for selected nodes" label="SOP nodes to Solaris" icon="hicon:/SVGIcons.index?LOP_sopimport.svg">
-    <script scriptType="python"><![CDATA[from tools import render_nodes_to_solaris
-
-render_nodes_to_solaris.translate_nodes_to_solaris()]]></script>
+wm = WindowManager()
+wm.show_window(RenderNodesManager)]]></script>
   </tool>
 
   <tool name="Reload Packages" label="Reload Packages" icon="hicon:/SVGIcons.index?ENGINE_reset.svg">
@@ -37,11 +30,10 @@ wm.show_window(ProjectManager)]]></script>
   </tool>
 
   <toolshelf name="Tevton Tools" label="Tevton Tools">
-    <memberTool name="Creating Render nodes for selected Nodes"/>
-    <memberTool name="Creating referenced sopimport nodes in Solaris for selected nodes"/>
-    <memberTool name="Reload Packages"/>
+    <memberTool name="Render Nodes Manager"/>
     <memberTool name="Project Manager"/>
     <memberTool name="IncrementSave"/>
+    <memberTool name="Reload Packages"/>
   </toolshelf>
 
   <tool name="IncrementSave" label="Increment Save" icon="hicon:/SVGIcons.index?DESKTOP_file_sequence.svg">
