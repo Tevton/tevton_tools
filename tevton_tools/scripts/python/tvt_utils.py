@@ -3,7 +3,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from qt_shim import QtWidgets, QtCore
+from qt_shim import QtWidgets, QtCore, QtGui
 
 _QT_MSG_SUPPRESSED = ("QFileSystemWatcher",)
 
@@ -180,6 +180,23 @@ def set_widget_validity(widget, is_valid):
     widget.setProperty("valid", is_valid)
     widget.style().unpolish(widget)
     widget.style().polish(widget)
+
+
+def load_svg_icon(path: str, color: str = "#ffffff", size: int = 32) -> "QtGui.QIcon":
+    """Return a QIcon from an SVG file, tinted to `color`."""
+    resolved = hou.text.expandString(path)
+    pixmap = QtGui.QPixmap(resolved)
+    if pixmap.isNull():
+        return QtGui.QIcon()
+    pixmap = pixmap.scaled(size, size, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+
+    # Paint solid color using SourceIn — only affects non-transparent pixels
+    painter = QtGui.QPainter(pixmap)
+    painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceIn)
+    painter.fillRect(pixmap.rect(), QtGui.QColor(color))
+    painter.end()
+
+    return QtGui.QIcon(pixmap)
 
 
 def on_item_clicked(widget, index):

@@ -56,7 +56,10 @@ class ProjectManager(QtWidgets.QMainWindow):
     @property
     def current_shot_name(self) -> str | None:
         """Return the name of the currently selected shot."""
-        return self.current_shot.text() if self.current_shot else None
+        if not self.current_shot:
+            return None
+        data = self.current_shot.data(QtCore.Qt.UserRole)
+        return data if data is not None else self.current_shot.text().strip()
 
     @property
     def current_file_name(self) -> str | None:
@@ -82,6 +85,50 @@ class ProjectManager(QtWidgets.QMainWindow):
     @property
     def can_create_file(self) -> bool:
         return self.has_project_selected and self.has_shot_selected
+
+    # =====================================================
+    # SHOT STATUS
+    # =====================================================
+
+    _SHOT_COLOR_ROLE = QtCore.Qt.UserRole + 1
+
+    class _ShotStatusDelegate(QtWidgets.QStyledItemDelegate):
+        """Paints a solid background fill behind each shot item."""
+
+        def paint(self, painter, option, index):
+            color = index.data(ProjectManager._SHOT_COLOR_ROLE)
+            if color:
+                painter.save()
+                painter.fillRect(option.rect, color)
+                painter.restore()
+            super().paint(painter, option, index)
+
+    _SHOT_STATUS_STYLE = {
+        "pause":       ("$TVT/icons/pause.svg",       "#2a2a2a", "On Pause",    "#aaaaaa"),
+        "in_progress": ("$TVT/icons/auto-apply.svg",  "#48331F", "In Progress", "#f0a040"),
+        "done":        ("$TVT/icons/check-circle.svg", "#2b372b", "Done",        "#4caf50"),
+    }
+    _status_icon_cache: dict = {}
+
+    def _shot_status_style(self, status: str):
+        """Return (QIcon, QColor, label) for the given shot status."""
+        icon_path, color_hex, label, icon_color = self._SHOT_STATUS_STYLE.get(
+            status, self._SHOT_STATUS_STYLE["pause"]
+        )
+        if status not in self._status_icon_cache:
+            self._status_icon_cache[status] = tvt_utils.load_svg_icon(icon_path, icon_color)
+        return (
+            self._status_icon_cache[status],
+            QtGui.QColor(color_hex),
+            label,
+        )
+
+    def _set_shot_status(self, status: str):
+        shot_name = self.current_shot_name
+        if not shot_name:
+            return
+        projects_store.set_shot_status(self.current_project_name, shot_name, status)
+        self.load_shot_list()
 
     # =====================================================
     # INIT
@@ -115,6 +162,8 @@ class ProjectManager(QtWidgets.QMainWindow):
         # Shots
         self.shots_text = self.ui.findChild(QtWidgets.QLabel, "lb_shots")
         self.shot_list = self.ui.findChild(QtWidgets.QListWidget, "lw_shot_list")
+        if self.shot_list:
+            self.shot_list.setItemDelegate(self._ShotStatusDelegate(self.shot_list))
         self.create_shot_button = self.ui.findChild(
             QtWidgets.QPushButton, "pb_create_shot"
         )
@@ -289,7 +338,16 @@ class ProjectManager(QtWidgets.QMainWindow):
         menu.addAction("Create Shot").triggered.connect(self.create_new_shot)
         if item:
             menu.addSeparator()
+            status_menu = menu.addMenu("Status")
+            status_menu.setFont(self._wm.menu_font(font_size=8))
+            menu.addSeparator()
             menu.addAction("Edit Shot").triggered.connect(self._edit_shot)
+            for _key in ("pause", "in_progress", "done"):
+                _icon, _, _label = self._shot_status_style(_key)
+                _act = status_menu.addAction(_icon, _label)
+                _act.triggered.connect(
+                    lambda _checked=False, k=_key: self._set_shot_status(k)
+                )
             menu.addAction("Reveal in Explorer").triggered.connect(
                 lambda: self.reveal_folder_by_type("shot")
             )
@@ -485,8 +543,14 @@ class ProjectManager(QtWidgets.QMainWindow):
 
         # Sort by mtime
         shots_folders.sort(reverse=True)
+        shot_statuses = projects_store.get_all_shot_statuses(self.current_project_name)
         for _, folder_name in shots_folders:
-            self.shot_list.addItem(folder_name)
+            status = shot_statuses.get(folder_name, "pause")
+            icon, color, _ = self._shot_status_style(status)
+            item = QtWidgets.QListWidgetItem(icon, " " + folder_name)
+            item.setData(QtCore.Qt.UserRole, folder_name)
+            item.setData(self._SHOT_COLOR_ROLE, color)
+            self.shot_list.addItem(item)
 
         self._update_button_states()
 
@@ -768,9 +832,7 @@ class ProjectManager(QtWidgets.QMainWindow):
         if not self._confirm_deletion(object_type, name, target_path):
             return
 
-        # Perform deletion
         success = self._perform_deletion(object_type, name, target_path, project_name)
-
         if success:
             self._update_ui_after_deletion(object_type)
             self._show_success_message(object_type, name)
@@ -804,11 +866,9 @@ class ProjectManager(QtWidgets.QMainWindow):
     ) -> bool:
         """Perform the actual deletion. Returns True if successful."""
         try:
-            # Step 1: Remove from database FIRST (for projects)
             if object_type == "project":
                 projects_store.remove_project(project_name)
 
-            # Step 2: Delete from filesystem
             if target_path.exists():
                 if object_type == "file":
                     target_path.unlink()

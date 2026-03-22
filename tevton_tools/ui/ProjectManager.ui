@@ -265,13 +265,13 @@
          <property name="minimumSize">
           <size>
            <width>0</width>
-           <height>40</height>
+           <height>30</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
            <width>16777215</width>
-           <height>70</height>
+           <height>60</height>
           </size>
          </property>
          <property name="title">
@@ -293,14 +293,14 @@
              <widget class="QLabel" name="lb_github_logo">
               <property name="minimumSize">
                <size>
-                <width>40</width>
-                <height>40</height>
+                <width>30</width>
+                <height>30</height>
                </size>
               </property>
               <property name="maximumSize">
                <size>
-                <width>40</width>
-                <height>40</height>
+                <width>30</width>
+                <height>30</height>
                </size>
               </property>
               <property name="sizeIncrement">
@@ -318,14 +318,14 @@
              <widget class="QLabel" name="lb_telegram_logo">
               <property name="minimumSize">
                <size>
-                <width>40</width>
-                <height>40</height>
+                <width>30</width>
+                <height>30</height>
                </size>
               </property>
               <property name="maximumSize">
                <size>
-                <width>40</width>
-                <height>40</height>
+                <width>30</width>
+                <height>30</height>
                </size>
               </property>
               <property name="text">

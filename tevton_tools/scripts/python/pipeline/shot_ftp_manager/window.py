@@ -234,7 +234,8 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         if self.ftp_tree and obj is self.ftp_tree.viewport():
             if etype == QtCore.QEvent.MouseButtonPress:
                 if event.button() == QtCore.Qt.LeftButton:
-                    self._ftp_drag_start_pos = event.pos()
+                    if self.ftp_tree.indexAt(event.pos()).isValid():
+                        self._ftp_drag_start_pos = event.pos()
             elif etype == QtCore.QEvent.MouseButtonRelease:
                 self._ftp_drag_start_pos = None
             elif etype == QtCore.QEvent.MouseMove:
@@ -330,7 +331,8 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         if self.local_tree and obj is self.local_tree.viewport():
             if etype == QtCore.QEvent.MouseButtonPress:
                 if event.button() == QtCore.Qt.LeftButton:
-                    self._local_drag_start_pos = event.pos()
+                    if self.local_tree.indexAt(event.pos()).isValid():
+                        self._local_drag_start_pos = event.pos()
             elif etype == QtCore.QEvent.MouseButtonRelease:
                 self._local_drag_start_pos = None
             elif etype == QtCore.QEvent.MouseMove:

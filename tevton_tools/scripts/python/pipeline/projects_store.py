@@ -1,6 +1,6 @@
 from pathlib import Path
 import json
-from config.config import PROJECTS_JSON_PATH
+from config.config import PROJECTS_JSON_PATH, SHOT_STATUSES_JSON_PATH
 
 
 class ProjectStoreError(Exception):
@@ -84,3 +84,32 @@ def upsert_project(project_name: str, project_data: dict):
         projects = {}
     projects[project_name] = project_data
     save_projects(projects)
+
+
+def _load_shot_statuses() -> dict:
+    if not Path(SHOT_STATUSES_JSON_PATH).exists():
+        return {}
+    try:
+        with open(SHOT_STATUSES_JSON_PATH, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_shot_statuses(data: dict):
+    try:
+        with open(SHOT_STATUSES_JSON_PATH, "w") as f:
+            json.dump(data, f, indent=4)
+    except Exception as e:
+        raise ProjectStoreError(f"Failed to save shot statuses: {e}")
+
+
+def get_all_shot_statuses(project_name: str) -> dict:
+    """Return {shot_name: status} for a project. Single file read."""
+    return _load_shot_statuses().get(project_name, {})
+
+
+def set_shot_status(project_name: str, shot_name: str, status: str):
+    data = _load_shot_statuses()
+    data.setdefault(project_name, {})[shot_name] = status
+    _save_shot_statuses(data)
