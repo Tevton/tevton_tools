@@ -1,227 +1,265 @@
-def create_render_node_setup():
-    import hou
+import hou
+from qt_shim import QtCore, QtGui, QtWidgets, QtUiTools
 
 
-    # Creating geo node with {render_prefix} prefix and setup node network
-    def create_render_node_network(out_node, reference_node_pos, offset, flag):
-        # Checking for already created {render_prefix} nodes
-        render_node_name = render_prefix + out_node.name().removeprefix(out_prefix).upper()
-        if hou.node("/obj/" + render_node_name) is not None:
-            for node in hou.node("/obj/" + render_node_name).children():
-                # Trying to find "obj_merge" node
-                if node.type().name() == "object_merge":
-                    objmerge_node = node
-                    result = 0
-                    # Show dialog only if "YES for all" is not active and paths differ
-                    if (
-                        not flag
-                        and objmerge_node.parm("objpath1").eval() != out_node.path()
-                    ):
-                        result = hou.ui.displayMessage(
-                            f'{hou.node("/obj/" + render_node_name)} already created and linked to '
-                            f'{objmerge_node.parm("objpath1").eval()}!!!\n \n'
-                            f"Would you like to change link to {out_node.path()}?",
-                            buttons=("YES", "YES for all", "Skip", "Cancel"),
-                            close_choice=3,
-                        )
-                        if result == 1:  # "YES for all"
-                            flag = True  # Set flag to True
+class RenderNodesManager(QtWidgets.QMainWindow):
 
-                    if result == 2:  # Skip current node
-                        continue
+    VERSION = "v1.0.0"
 
-                    # Automatically apply if "YES for all" is active or user selects "YES"
-                    if result == 0 or result == 1:
-                        for node in hou.node("/obj/" + render_node_name).children():
-                            if node.type().name() == "object_merge":
-                                node.parm("objpath1").set(out_node.path())
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._load_ui()
+        self._find_widgets()
+        self._setup_ui()
+        self._setup_prefix_suffix()
+        self._connect_signals()
 
-                    # Exit if user selects "Cancel"
-                    if result == 3:
-                        exit()
-            return flag  # Return updated flag
+    def _load_ui(self):
+        ui_path = hou.text.expandString("$TVT/ui/RenderNodesManager.ui")
+        self.ui = QtUiTools.QUiLoader().load(ui_path, parentWidget=self)
+        self.setCentralWidget(self.ui)
+        self.setParent(hou.qt.mainWindow(), QtCore.Qt.Window)
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+        self.setWindowTitle(f"RNM - {self.VERSION}")
 
-        # Creating node setup in render node
+    def _find_widgets(self):
+        self.prefix_find = self.ui.findChild(QtWidgets.QLineEdit, "lineEdit")
+        self.prefix_create = self.ui.findChild(QtWidgets.QLineEdit, "lineEdit_2")
+        self.btn_create = self.ui.findChild(QtWidgets.QPushButton, "pushButton")
+        self.chk_solaris = self.ui.findChild(QtWidgets.QCheckBox, "checkBox")
+
+    def _setup_ui(self):
+        self.setMaximumSize(350, 250)
+
+    def _setup_prefix_suffix(self):
+        for le in (self.prefix_find, self.prefix_create):
+            placeholder = le.placeholderText() or ""
+            le.setText(placeholder + "_")
+            le.setPlaceholderText("")
+            le.textChanged.connect(lambda _, widget=le: self._enforce_suffix(widget))
+
+    def _enforce_suffix(self, widget):
+        text = widget.text()
+        clean = text.strip("_")
+        corrected = clean + "_"
+        if text != corrected:
+            widget.blockSignals(True)
+            widget.setText(corrected)
+            widget.setCursorPosition(len(clean))
+            widget.blockSignals(False)
+
+    def _get_prefixes(self):
+        find = self.prefix_find.text().upper()
+        create = self.prefix_create.text().upper()
+        return find, create
+
+    def _connect_signals(self):
+        self.btn_create.clicked.connect(self._on_create_clicked)
+
+    def _msgbox(self, icon, title, text, buttons=QtWidgets.QMessageBox.Ok):
+        mb = QtWidgets.QMessageBox(icon, title, text, buttons, self)
+        mb.setFont(QtGui.QFont("Unispace", 8, QtGui.QFont.Bold))
+        return mb.exec()
+
+    def _on_create_clicked(self):
+        find_prefix, create_prefix = self._get_prefixes()
+
+        selected = hou.selectedNodes()
+        if not selected:
+            self._msgbox(
+                QtWidgets.QMessageBox.Warning, "Warning", "Please select nodes first."
+            )
+            return
+
+        for node in selected:
+            if node.parent().name() != "obj":
+                self._msgbox(
+                    QtWidgets.QMessageBox.Warning,
+                    "Warning",
+                    "Please select nodes only in /obj context.",
+                )
+                return
+
+        source_nodes = []
+        render_nodes = []
+        for n in selected:
+            if n.type().name() != "geo":
+                continue
+            if n.name().upper().startswith(create_prefix):
+                render_nodes.append(n)
+            else:
+                source_nodes.append(n)
+
+        if source_nodes and render_nodes:
+            self._msgbox(
+                QtWidgets.QMessageBox.Warning,
+                "Warning",
+                "Please select either source or render nodes, not both.",
+            )
+            return
+
+        if render_nodes:
+            self._handle_render_nodes_selected(render_nodes, create_prefix)
+        elif source_nodes:
+            self._handle_source_nodes_selected(source_nodes, find_prefix, create_prefix)
         else:
-            # Createing geo node with name of output node
-            new_geo_node = hou.node("/obj").createNode("geo")
-            new_geo_node.setColor(hou.Color(0.451, 0.369, 0.796))
-            new_geo_node.setName(
-                render_prefix + out_node.name().upper().removeprefix(out_prefix),
-                unique_name=True,
-            )
-            get_geo_node_pos = out_node.parent().position()
-            new_geo_node.setPosition(
-                hou.Vector2(reference_node_pos[0] + 4, reference_node_pos[1] + offset)
-            )
-            new_geo_node.setGenericFlag(hou.nodeFlag.Display, 0)
-
-            # Creating null node with name of render node
-            new_null_node = hou.node(new_geo_node.path()).createNode("null")
-            new_null_node.setColor(hou.Color(0.451, 0.369, 0.796))
-            new_null_node.setName(new_geo_node.name())
-            new_null_node.setGenericFlag(hou.nodeFlag.Render, 1)
-
-            # Creating objmerge node
-            new_objmerge_node = hou.node(new_geo_node.path()).createNode("object_merge")
-            new_objmerge_node.setColor(hou.Color(1, 0, 0))
-            get_null_node_pos = new_null_node.position()
-            new_objmerge_node.setPosition(
-                hou.Vector2(get_null_node_pos[0], get_null_node_pos[1] + 3)
+            self._msgbox(
+                QtWidgets.QMessageBox.Information,
+                "Info",
+                "No geo nodes found in selection.",
             )
 
-            # Set path to output null node
-            new_objmerge_node.parm("objpath1").set(out_node.path())
-
-            # Connecting objmerge and null node
-            new_null_node.setInput(0, new_objmerge_node)
-            return flag  # Return updated flag
-
-
-    # Find bottom node position
-    def find_min_child_pos(node):
-        nodes = node.children()
-        for n in nodes:
-            # Find the minimum Y coordinate among all child nodes
-            min_y_pos = min(n.position()[1] for n in nodes)
-            if n.position()[1] == min_y_pos:
-                get_n_pos = n.position()
-                return get_n_pos
-
-
-    # Creating or changing name of null in selected nodes below bottom node with {out_prefix}
-    def setup_children_null(child):
-        name = child.name().upper()
-        new_null_node = hou.node(child.parent().path()).createNode("null")
-        new_null_node.setColor(hou.Color(0.451, 0.369, 0.796))
-        new_null_node.setPosition(hou.Vector2(child.position()[0], child.position()[1] - 2))
-        new_null_node.setInput(0, child)
-        if name.startswith("OUT_"):
-            new_null_node.setName(out_prefix + name.removeprefix("OUT_"), unique_name=True)
+    def _solaris_name_for(self, node_name, create_prefix):
+        if node_name.upper().startswith(create_prefix):
+            name = node_name[len(create_prefix) :]
         else:
-            new_null_node.setName(out_prefix + name, unique_name=True)
-        return new_null_node
+            name = node_name
+        name = name.strip("_")
+        if not name or name[0].isdigit():
+            name = node_name
+        return name
 
-
-    ## Main script body ##
-    # Checking for selected nodes
-    if not hou.selectedNodes():
-        hou.ui.displayMessage("Before running Tool Please select nodes", title="WARNING")
-        exit()
-
-    # Checking selected nodes for context
-    for el in hou.selectedNodes():
-        if el.parent().name() != "obj":
-            hou.ui.displayMessage(
-                "Please select nodes only in /obj context", title="WARNING"
-            )
-            exit()
-    else:
-        init_out_prefix = "RENDER_"  # Prefix for user output nodes
-        init_render_prefix = "RENDER_"  # Prefix for render nodes
-
-        # Ask user for initialize prefixes
-        result, values = hou.ui.readMultiInput(
-            "Please specify prefixes:",
-            ("YOUR output prefix", "Render Node prefix"),
-            buttons=("OK", "Cancel"),
-            close_choice=1,
-            title="Render nodes Setup",
-            initial_contents=(f"{init_out_prefix}", f"{init_render_prefix}"),
-        )
-        out_prefix = str(values[0])  # User initialized output prefix for nodes
-        render_prefix = str(values[1])  # User initialized render prefix for nodes
-
-        if result == 1:  # 'Cancel'
-            exit()
-        else:
-            offset = 0  # Offset for new nodes
-            reference_node_pos = hou.selectedNodes()[
-                0
-            ].position()  # Position for creating new nodes
-            yes_for_all = False  # Flag to track first "YES for All" state
-            yes_for_all2 = False  # Flag to track second "YES for All" state
-            yes_for_all3 = False  # Flag to track "YES for All" state in {create_render_node_network} function
-
-            # Checking selected nodes
-            for node in hou.selectedNodes():
-                # Check for node type "geo" and node name, if name starts with {render_prefix}, skip node
-                if node.type().name() == "geo" and not node.name().upper().startswith(
-                    out_prefix
+    def _handle_source_nodes_selected(self, geo_nodes, find_prefix, create_prefix):
+        matches = []
+        for geo in geo_nodes:
+            for child in geo.children():
+                if child.type().name() == "null" and child.name().upper().startswith(
+                    find_prefix
                 ):
-                    min_child_pos = find_min_child_pos(node)
+                    suffix = child.name()[len(find_prefix) :].lstrip("_")
+                    render_name = create_prefix + suffix
+                    if hou.node("/obj/" + render_name) is None:
+                        matches.append((child, render_name))
 
-                    # Trying to find null nodes with {out_prefix} and ask user to make some actions
-                    for child in node.children():
-                        if child.type().name() == "null":
-                            if child.name().upper().startswith(out_prefix):
-                                yes_for_all3 = create_render_node_network(
-                                    child, reference_node_pos, offset, yes_for_all3
-                                )
-                                offset -= 1
-                            if (
-                                not child.name().upper().startswith(out_prefix)
-                                and min_child_pos[1] == child.position()[1]
-                            ):
-                                if (
-                                    not yes_for_all
-                                ):  # Show dialog only if first "YES for All" is not active
-                                    result = hou.ui.displayMessage(
-                                        f'In {node} detected bottom "null" node {child.name()} without {out_prefix} prefix!!!\n \n'
-                                        f'Would you like to create "null" node with prefix {out_prefix}?',
-                                        buttons=("YES", "YES for All", "Skip", "Cancel"),
-                                        close_choice=3,
-                                        title="WARNING",
-                                    )
-                                    if result == 1:  # "YES for all"
-                                        yes_for_all = (
-                                            True  # Flag to track first "YES for All" state
-                                        )
-                                if result == 2:  # Skip current node
-                                    continue
-                                if (
-                                    result == 0 or result == 1
-                                ):  # Automatically apply if first "YES for All" is active
-                                    new_null_node = setup_children_null(child)
-                                    yes_for_all3 = create_render_node_network(
-                                        new_null_node,
-                                        reference_node_pos,
-                                        offset,
-                                        yes_for_all3,
-                                    )
-                                    offset -= 1
-                                if result == 3:  # "Cancel"
-                                    exit()
+        if not matches:
+            self._msgbox(
+                QtWidgets.QMessageBox.Information,
+                "Info",
+                "No new render nodes to create.\n"
+                "All matching nodes already exist or no nulls with the specified prefix found.",
+            )
+            return
 
-                        # Find bottom nodes position and ask user to create null nodes under them
-                        if (
-                            min_child_pos[1] == child.position()[1]
-                            and child.type().name() != "null"
-                        ):
-                            if (
-                                not yes_for_all2
-                            ):  # Show dialog only if second "YES for All" is not active
-                                result = hou.ui.displayMessage(
-                                    f'Cannot find any bottom "null" nodes in {node} \n \n'
-                                    "Would you like to create output nodes for current node?",
-                                    buttons=("YES", "Yes for all", "Skip", "Cancel"),
-                                    close_choice=3,
-                                    details=f"Tool will create null node under bottom node with {out_prefix} prefix",
-                                    title="WARNING",
-                                )
-                                if result == 1:  # "YES for all"
-                                    yes_for_all2 = (
-                                        True  # Flag to track second "YES for All" state
-                                    )
-                            if result == 2:  # Skip current node
-                                continue
-                            if (
-                                result == 0 or result == 1
-                            ):  # Automatically apply if second "YES for All" is active
-                                new_null_node = setup_children_null(child)
-                                yes_for_all3 = create_render_node_network(
-                                    new_null_node, reference_node_pos, offset, yes_for_all3
-                                )
-                                offset -= 1
-                            if result == 3:  # "Cancel"
-                                exit()
+        new_solaris_count = 0
+        if self.chk_solaris.isChecked():
+            for _, render_name in matches:
+                if (
+                    hou.node(
+                        "/stage/" + self._solaris_name_for(render_name, create_prefix)
+                    )
+                    is None
+                ):
+                    new_solaris_count += 1
+
+        msg = f"Will create {len(matches)} render node(s) in /obj"
+        if self.chk_solaris.isChecked() and new_solaris_count > 0:
+            msg += f"\nand {new_solaris_count} SOP Import node(s) in /stage"
+
+        result = self._msgbox(
+            QtWidgets.QMessageBox.Question,
+            "Confirm",
+            msg,
+            QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel,
+        )
+        if result != QtWidgets.QMessageBox.Ok:
+            return
+
+        ref_pos = geo_nodes[0].position()
+        created_nodes = []
+        for i, (source_null, render_name) in enumerate(matches):
+            node = self._create_render_node(source_null, render_name, ref_pos, -i)
+            if node:
+                created_nodes.append(node)
+
+        if self.chk_solaris.isChecked() and created_nodes:
+            self._create_solaris_imports(created_nodes, create_prefix)
+
+    def _handle_render_nodes_selected(self, render_nodes, create_prefix):
+        new_imports = []
+        for rn in render_nodes:
+            if (
+                hou.node("/stage/" + self._solaris_name_for(rn.name(), create_prefix))
+                is None
+            ):
+                new_imports.append(rn)
+
+        if not new_imports:
+            self._msgbox(
+                QtWidgets.QMessageBox.Information,
+                "Info",
+                "All SOP Import nodes already exist in /stage.",
+            )
+            return
+
+        result = self._msgbox(
+            QtWidgets.QMessageBox.Question,
+            "Confirm",
+            f"Will create {len(new_imports)} SOP Import node(s) in /stage",
+            QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel,
+        )
+        if result != QtWidgets.QMessageBox.Ok:
+            return
+
+        self._create_solaris_imports(new_imports, create_prefix)
+
+    def _create_render_node(self, source_null, render_name, ref_pos, offset):
+        purple = hou.Color(0.451, 0.369, 0.796)
+
+        geo = hou.node("/obj").createNode("geo")
+        geo.setColor(purple)
+        geo.setName(render_name, unique_name=True)
+        geo.setPosition(hou.Vector2(ref_pos[0] + 4, ref_pos[1] + offset))
+        geo.setGenericFlag(hou.nodeFlag.Display, 0)
+
+        objmerge = geo.createNode("object_merge")
+        objmerge.setColor(hou.Color(1, 0, 0))
+        objmerge.parm("objpath1").set(source_null.path())
+
+        null = geo.createNode("null")
+        null.setColor(purple)
+        null.setName(render_name)
+        null.setGenericFlag(hou.nodeFlag.Render, 1)
+        null.setInput(0, objmerge)
+
+        null_pos = null.position()
+        objmerge.setPosition(hou.Vector2(null_pos[0], null_pos[1] + 3))
+
+        return geo
+
+    def _create_solaris_imports(self, render_nodes, create_prefix):
+        stage = hou.node("/stage")
+        if not stage:
+            return
+
+        children = stage.children()
+        if children:
+            min_y = min(c.position()[1] for c in children)
+            ref_pos = hou.Vector2(children[0].position()[0], min_y - 1.2)
+        else:
+            ref_pos = hou.Vector2(0, 0)
+
+        prev_node = None
+        for i, render_node in enumerate(render_nodes):
+            name = self._solaris_name_for(render_node.name(), create_prefix)
+
+            if hou.node("/stage/" + name) is not None:
+                continue
+
+            sop_import = stage.createNode("sopimport")
+            sop_import.setName(name, unique_name=True)
+            sop_import.setPosition(hou.Vector2(ref_pos[0], ref_pos[1] - (i * 1.2)))
+
+            render_null = next(
+                (c for c in render_node.children() if c.type().name() == "null"), None
+            )
+            sop_import.parm("soppath").set(
+                render_null.path() if render_null else render_node.path()
+            )
+            sop_import.parm("asreference").set(True)
+            sop_import.parm("enable_prefixabsolutepaths").set(True)
+            sop_import.parm("prefixabsolutepaths").set(True)
+
+            if prev_node is not None:
+                sop_import.setInput(0, prev_node)
+
+            prev_node = sop_import
