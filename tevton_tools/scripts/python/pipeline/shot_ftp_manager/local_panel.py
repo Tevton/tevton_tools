@@ -85,13 +85,17 @@ class LocalPanel:
 
         def _on_dir_loaded(_):
             self.file_model.directoryLoaded.disconnect(_on_dir_loaded)
-            self._win._wm.safe_timer(self._win, _lock_columns, 100)  # wait for Qt layout to settle before locking
+            self._win._wm.safe_timer(
+                self._win, _lock_columns, 100
+            )  # wait for Qt layout to settle before locking
 
         self.file_model.directoryLoaded.connect(_on_dir_loaded)
         self.file_model.fileRenamed.connect(
             lambda _, old, new: self._win.log(f"Renamed: {old} → {new}", "info")
         )
-        tree.selectionModel().selectionChanged.connect(self._win._on_local_selection_changed)
+        tree.selectionModel().selectionChanged.connect(
+            self._win._on_local_selection_changed
+        )
 
         self._win.log(f"Local root: {root_path}", "info")
 
