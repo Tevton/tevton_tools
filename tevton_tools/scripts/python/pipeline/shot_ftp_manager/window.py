@@ -198,15 +198,9 @@ class ShotFTPManager(QtWidgets.QMainWindow):
     def _setup_ftp_tree(self):
         if not self.ftp_tree:
             return
-        self.ftp_tree.setHeaderLabels(["Name", "Size", "Date Modified"])
         self.ftp_tree.setColumnWidth(0, 300)
         self.ftp_tree.setColumnWidth(1, 80)
         self.ftp_tree.setColumnWidth(2, 140)
-        self.ftp_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
-        self.ftp_tree.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.ftp_tree.setRootIsDecorated(False)
-        self.ftp_tree.setAlternatingRowColors(True)
-        self.ftp_tree.setUniformRowHeights(True)
         header = self.ftp_tree.header()
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
         header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
