@@ -767,28 +767,31 @@
           <bool>true</bool>
          </property>
          <property name="dragDropOverwriteMode">
-          <bool>true</bool>
+          <bool>false</bool>
          </property>
          <property name="dragDropMode">
           <enum>QAbstractItemView::DragDropMode::DragDrop</enum>
+         </property>
+         <property name="alternatingRowColors">
+          <bool>false</bool>
          </property>
          <property name="selectionMode">
           <enum>QAbstractItemView::SelectionMode::ExtendedSelection</enum>
          </property>
          <property name="selectionBehavior">
-          <enum>QAbstractItemView::SelectionBehavior::SelectItems</enum>
+          <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
          </property>
          <property name="rootIsDecorated">
-          <bool>true</bool>
+          <bool>false</bool>
          </property>
          <property name="uniformRowHeights">
-          <bool>false</bool>
+          <bool>true</bool>
          </property>
          <property name="itemsExpandable">
           <bool>true</bool>
          </property>
          <property name="sortingEnabled">
-          <bool>true</bool>
+          <bool>false</bool>
          </property>
          <property name="wordWrap">
           <bool>false</bool>
@@ -797,7 +800,7 @@
           <bool>false</bool>
          </property>
          <property name="expandsOnDoubleClick">
-          <bool>true</bool>
+          <bool>false</bool>
          </property>
          <attribute name="headerCascadingSectionResizes">
           <bool>true</bool>

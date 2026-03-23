@@ -48,8 +48,10 @@ class LocalPanel:
 
     def setup_model(self, root_path: str):
         """Create proxy stack and attach to the local tree."""
-        tree = self._win.local_tree
-        if not tree:
+        self._win.local_path_edit.setText(root_path)
+
+        if not root_path or not os.path.isdir(root_path):
+            self._win.log(f"Local path not found: {root_path}", "warning")
             return
 
         self.file_model = QtWidgets.QFileSystemModel()
@@ -57,55 +59,45 @@ class LocalPanel:
         self.file_model.setFilter(
             QtCore.QDir.AllDirs | QtCore.QDir.Files | QtCore.QDir.NoDotAndDotDot
         )
+        self.file_model.setRootPath(root_path)
 
         self._proxy = _FolderFirstProxy()
         self._proxy.setSourceModel(self.file_model)
 
-        if root_path and os.path.isdir(root_path):
-            self.file_model.setRootPath(root_path)
-            tree.setModel(self._proxy)
-            tree.setRootIndex(
-                self._proxy.mapFromSource(self.file_model.index(root_path))
-            )
+        tree = self._win.local_tree
+        tree.setModel(self._proxy)
+        tree.setRootIndex(self._proxy.mapFromSource(self.file_model.index(root_path)))
+        tree.setColumnHidden(2, True)
+        tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
+        tree.setEditTriggers(QtWidgets.QAbstractItemView.EditKeyPressed)
+        tree.setSortingEnabled(True)
+        tree.sortByColumn(0, QtCore.Qt.AscendingOrder)
 
-            tree.setColumnWidth(0, 300)
-            tree.setColumnWidth(1, 100)
-            tree.setColumnHidden(2, True)
-            tree.setColumnWidth(3, 140)
+        header = tree.header()
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeToContents)
+        header.setStretchLastSection(False)
 
-            header = tree.header()
-            header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-            header.setSectionResizeMode(1, QtWidgets.QHeaderView.Interactive)
-            header.setSectionResizeMode(3, QtWidgets.QHeaderView.Interactive)
-            header.setStretchLastSection(False)
-            header.setMinimumSectionSize(80)
+        def _lock_columns(_h=header):
+            _h.setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
+            _h.setSectionResizeMode(3, QtWidgets.QHeaderView.Fixed)
 
-            def _on_dir_loaded(_, _t=tree, _h=header):
-                _t.resizeColumnToContents(1)
-                # _h.resizeSection(1, _h.sectionSize(2) + 100)
-                _t.resizeColumnToContents(3)
-                self.file_model.directoryLoaded.disconnect(_on_dir_loaded)
+        def _on_dir_loaded(_):
+            self.file_model.directoryLoaded.disconnect(_on_dir_loaded)
+            self._win._wm.safe_timer(
+                self._win, _lock_columns, 100
+            )  # wait for Qt layout to settle before locking
 
-            self.file_model.directoryLoaded.connect(_on_dir_loaded)
+        self.file_model.directoryLoaded.connect(_on_dir_loaded)
+        self.file_model.fileRenamed.connect(
+            lambda _, old, new: self._win.log(f"Renamed: {old} → {new}", "info")
+        )
+        tree.selectionModel().selectionChanged.connect(
+            self._win._on_local_selection_changed
+        )
 
-            tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
-            tree.setEditTriggers(QtWidgets.QAbstractItemView.EditKeyPressed)
-            tree.setSortingEnabled(True)
-            tree.sortByColumn(0, QtCore.Qt.AscendingOrder)
-
-            tree.selectionModel().selectionChanged.connect(
-                self._win._on_local_selection_changed
-            )
-
-            self.file_model.fileRenamed.connect(
-                lambda _path, old, new: self._win.log(f"Renamed: {old} → {new}", "info")
-            )
-
-            self._win.log(f"Local root: {root_path}", "info")
-        else:
-            self._win.log(f"Local path not found: {root_path}", "warning")
-
-        self._win.local_path_edit.setText(root_path)
+        self._win.log(f"Local root: {root_path}", "info")
 
     # ------------------------------------------------------------------
     # Navigation

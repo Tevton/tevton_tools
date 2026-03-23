@@ -95,18 +95,17 @@ class FTPPanel:
         header.setSortIndicator(0, QtCore.Qt.AscendingOrder)
         header.sectionClicked.connect(self._on_header_clicked)
 
+    def _restore_sort_indicator(self):
+        order = QtCore.Qt.AscendingOrder if self._sort_ascending else QtCore.Qt.DescendingOrder
+        self._win.ftp_tree.header().setSortIndicator(self._sort_column, order)
+
     def _on_header_clicked(self, col: int):
         if col == self._sort_column:
             self._sort_ascending = not self._sort_ascending
         else:
             self._sort_column = col
             self._sort_ascending = True
-        order = (
-            QtCore.Qt.AscendingOrder
-            if self._sort_ascending
-            else QtCore.Qt.DescendingOrder
-        )
-        self._win.ftp_tree.header().setSortIndicator(self._sort_column, order)
+        self._restore_sort_indicator()
         self._apply_sort()
 
     def _apply_sort(self):
@@ -165,7 +164,6 @@ class FTPPanel:
         Populate the FTP tree from listing results.
         """
         tree = self._win.ftp_tree
-        tree.setSortingEnabled(False)
         tree.clear()
         self.clear_selection()
 
@@ -240,6 +238,7 @@ class FTPPanel:
 
             tree.addTopLevelItems(items)
 
+        self._restore_sort_indicator()
 
     # ------------------------------------------------------------------
     # Navigation

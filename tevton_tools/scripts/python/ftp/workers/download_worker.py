@@ -25,11 +25,13 @@ class FTPDownloadWorker(BaseTransferWorker):
     """
 
     overwrite_needed = QtCore.Signal(list)  # list of conflicting filenames
-    files_scanned = QtCore.Signal(list)    # list of (remote_file, local_dir, size)
+    files_scanned = QtCore.Signal(list)  # list of (remote_file, local_dir, size)
     MAX_CONNECTIONS = 4
     SPEED_WINDOW = 5.0  # seconds for rolling speed average
 
-    def __init__(self, host, user, password, port, remote_paths, local_dir, use_tls=False):
+    def __init__(
+        self, host, user, password, port, remote_paths, local_dir, use_tls=False
+    ):
         super().__init__(host, user, password, port, use_tls=use_tls)
         self.remote_paths = remote_paths or []
         self.local_dir = local_dir
@@ -46,6 +48,7 @@ class FTPDownloadWorker(BaseTransferWorker):
         self._download_lock = threading.Lock()
         self._errors: list = []
         self._log_queue: queue.Queue = queue.Queue()
+
     def set_overwrite(self, confirmed: bool):
         """Called from the main thread to unblock the worker after user confirms."""
         self._overwrite_confirmed = confirmed
@@ -210,15 +213,19 @@ class FTPDownloadWorker(BaseTransferWorker):
 
                     elapsed = time.time() - file_start
                     speed = (fb[0] / elapsed / 1024 / 1024) if elapsed > 0 else 0
-                    self._log_queue.put((f"Completed: {filename} — {speed:.1f} MB/s", "success"))
+                    self._log_queue.put(
+                        (f"Completed: {filename} — {speed:.1f} MB/s", "success")
+                    )
 
                     with self._download_lock:
                         self._downloaded += 1
                 except Exception as e:
-                    self._log_queue.put((
-                        f"Failed to download {remote_file}: {e}",
-                        "warning",
-                    ))
+                    self._log_queue.put(
+                        (
+                            f"Failed to download {remote_file}: {e}",
+                            "warning",
+                        )
+                    )
                 finally:
                     download_queue.task_done()
 
