@@ -55,6 +55,7 @@ class FTPUploadWorker(BaseTransferWorker):
         self._stats_lock = threading.Lock()
         self._log_queue: queue.Queue = queue.Queue()
         self._stop_called = False
+
     def add_total_bytes(self, n: int):
         self.total_bytes += n
 
@@ -257,7 +258,11 @@ class _CountingReader:
             n = len(data)
             self._worker._transferred_bytes += n
             self._file_bytes += n
-            pct = int(self._file_bytes / self._file_size * 100) if self._file_size > 0 else 0
+            pct = (
+                int(self._file_bytes / self._file_size * 100)
+                if self._file_size > 0
+                else 0
+            )
             with self._worker._file_progress_lock:
                 self._worker._file_progress[self._file_key] = min(pct, 99)
         return data
