@@ -32,7 +32,10 @@ class FTPMakeDirsWorker(BaseFTPWorker):
             ftp.quit()
 
             if failed:
-                self._safe_finish(False, f"Created {created}, failed {len(failed)}: {', '.join(failed)}")
+                self._safe_finish(
+                    False,
+                    f"Created {created}, failed {len(failed)}: {', '.join(failed)}",
+                )
             else:
                 self._safe_finish(True, f"Created {created} directories")
 
@@ -52,4 +55,4 @@ class FTPMakeDirsWorker(BaseFTPWorker):
             try:
                 ftp.mkd(current)
             except Exception:
-                pass  # 550 = already exists
+                pass

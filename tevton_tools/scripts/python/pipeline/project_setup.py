@@ -41,7 +41,6 @@ class ProjectSetup(QtWidgets.QMainWindow):
         self._wm = get_window_manager()
         self._ui_state = UIStateController()
         self._connection_animation = tvt_utils.ConnectionAnimator(self)
-        # Fix: Connect timeout to separate handler
         self._connection_animation.timeout_reached.connect(self._on_connection_timeout)
 
         self.ftp_manager = FTPManager(self)
@@ -155,8 +154,9 @@ class ProjectSetup(QtWidgets.QMainWindow):
         self.ocio_profile.currentTextChanged.connect(self._update_ocio_choice)
 
     def _connect_ftp_signals(self):
-        # Automatic UI block/unblock tied to FTP worker lifecycle.
-        # cooldown_ms prevents button spam on fast operations.
+        """Automatic UI block/unblock tied to FTP worker lifecycle.
+        cooldown_ms prevents button spam on fast operations.
+        """
         self._ui_state.bind(
             self.ftp_manager.busy_changed,
             "ftp_host",
@@ -366,7 +366,6 @@ class ProjectSetup(QtWidgets.QMainWindow):
 
     def _update_project(self):
         """Update existing project with confirmation."""
-        # Optional: Ask for confirmation before updating
         if self.mode == ProjectMode.EDIT:
             result = self._wm.show_buttons_dialog(
                 self,
@@ -468,7 +467,6 @@ class ProjectSetup(QtWidgets.QMainWindow):
                 self.ftp_host.setText(stripped)
             return
 
-        # Block signals to prevent cascading validators/handlers
         for w in (self.ftp_host, self.ftp_user, self.ftp_pw, self.ftp_port):
             w.blockSignals(True)
 
@@ -481,7 +479,6 @@ class ProjectSetup(QtWidgets.QMainWindow):
         for w in (self.ftp_host, self.ftp_user, self.ftp_pw, self.ftp_port):
             w.blockSignals(False)
 
-        # Trigger validators manually after unblock
         self.validate_host()
         self.validate_user()
 
@@ -527,7 +524,6 @@ class ProjectSetup(QtWidgets.QMainWindow):
         self._connection_animation.stop(success=success)
 
         if not success:
-            # Use safe timer to show message after window is ready
             self._wm.safe_timer(
                 self,
                 lambda: self._wm.show_buttons_dialog(
@@ -551,13 +547,10 @@ class ProjectSetup(QtWidgets.QMainWindow):
     def closeEvent(self, event):
         """Handle close event with immediate connection abort."""
 
-        # 1. Stop animation immediately
         if hasattr(self, "_connection_animation"):
             self._connection_animation.stop()
 
-        # 2. If connecting, abort immediately
         if hasattr(self, "ftp_manager") and self.ftp_manager:
-            # Check if connection worker is running
             if self.ftp_manager.is_busy():
                 worker = getattr(self.ftp_manager, "_current_worker", None)
                 if worker and "ConnectWorker" in type(worker).__name__:
@@ -565,7 +558,6 @@ class ProjectSetup(QtWidgets.QMainWindow):
                     worker.terminate()
                     worker.wait(50)
 
-            # Disconnect signals
             try:
                 self.ftp_manager.connection_checked.disconnect(
                     self._on_connection_checked
@@ -573,10 +565,8 @@ class ProjectSetup(QtWidgets.QMainWindow):
             except (TypeError, RuntimeError):
                 pass
 
-        # 3. Clear UI state
         if hasattr(self, "_ui_state"):
             self._ui_state.clear()
 
-        # 4. Accept close
         event.accept()
         super().closeEvent(event)

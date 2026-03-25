@@ -83,15 +83,12 @@ class WindowManager:
         """
         Universal function to show UI windows in Houdini.
         """
-        # Generate unique ID for this window
         window_id = self._get_window_id(window_class, **kwargs)
 
-        # Check if window already exists
         existing = self._get_window(window_id)
         if existing:
             return self._focus_window(existing)
 
-        # Also check hou.session for backward compatibility
         attr_name = self._get_attr_name(window_class, **kwargs)
         if hasattr(hou.session, attr_name):
             try:
@@ -105,14 +102,11 @@ class WindowManager:
             except:
                 pass
 
-        # Create new window instance
         win = window_class(parent=parent, **kwargs)
 
-        # On Linux, Qt.Tool sets _NET_WM_WINDOW_TYPE_UTILITY — the closest
-        # equivalent to Windows' owned-window model. Keeps the window above
-        # its parent (Houdini) without being globally on top.
         if os.name == "posix":
             win.setWindowFlag(QtCore.Qt.Tool, True)
+            # Temporary fix, remove this after splitting tools from houdini
             # Set transient parent to the actual parent pipeline window
             # so the WM stacks child above parent. Uses setTransientParent
             # (not setParent) to avoid Qt parent-child cascade issues
@@ -122,7 +116,6 @@ class WindowManager:
                 parent.winId()
                 win.windowHandle().setTransientParent(parent.windowHandle())
 
-        # Center the window based on parameter
         if centering == "screen":
             self.center_window(win)
         elif centering == "parent" and parent:
@@ -131,7 +124,6 @@ class WindowManager:
         # Store in hou.session for backward compatibility
         setattr(hou.session, attr_name, win)
 
-        # Store in our manager
         self._windows[window_id] = weakref.ref(win)
         self._window_classes[window_id] = window_class
 
@@ -139,14 +131,11 @@ class WindowManager:
         if parent:
             self._setup_parent_child_relationship(parent, win, window_id)
 
-        # Connect callback signal
         if callback_signal:
             self._connect_callback(win, callback_signal, window_id)
 
-        # Track window closure
         win.destroyed.connect(lambda: self._on_window_closed(window_id, attr_name))
 
-        # Show window
         win.show()
 
         return win
@@ -303,7 +292,7 @@ class WindowManager:
             del self._parent_child[parent_id]
 
     # =====================================================
-    # CENTRALIZED LOGGING - SINGLE SOURCE OF TRUTH
+    # CENTRALIZED LOGGING
     # =====================================================
 
     def register_log_widget(self, window, log_widget):

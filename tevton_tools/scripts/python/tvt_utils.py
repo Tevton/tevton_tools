@@ -61,12 +61,12 @@ def _cleanup_session_windows():
 
                 if isinstance(win, QtWidgets.QWidget):
                     try:
-                        win.isVisible()  # raises RuntimeError if C++ object was already deleted
+                        win.isVisible()
                         win.blockSignals(True)
                         win.close()
                         win.deleteLater()
                     except RuntimeError:
-                        pass  # уже удалён Qt — просто идём дальше
+                        pass
 
                 delattr(hou.session, attr)
 
@@ -193,7 +193,6 @@ def load_svg_icon(path: str, color: str = "#ffffff", size: int = 32) -> "QtGui.Q
         size, size, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation
     )
 
-    # Paint solid color using SourceIn — only affects non-transparent pixels
     painter = QtGui.QPainter(pixmap)
     painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceIn)
     painter.fillRect(pixmap.rect(), QtGui.QColor(color))
@@ -214,20 +213,17 @@ def on_item_clicked(widget, index):
 
     sender = widget.sender()
 
-    # Select item
     sender.selectionModel().select(
         index,
         QtCore.QItemSelectionModel.ClearAndSelect | QtCore.QItemSelectionModel.Rows,
     )
 
-    # Dispatch based on which list was clicked
     if sender == widget.project_list:
         widget.load_shot_list()
         widget.file_list.clear()
         widget.activate_project()
     elif sender == widget.shot_list:
         widget.load_file_list()
-    # Для file_list ничего не делаем
 
 
 def open_file_or_folder(path, file_type=None):
@@ -260,24 +256,44 @@ def open_file_or_folder(path, file_type=None):
         if platform.system() == "Windows":
             try:
                 import winreg
+
                 with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r".nk") as k:
                     prog_id, _ = winreg.QueryValueEx(k, "")
                 shell_path = rf"{prog_id}\shell"
                 with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, shell_path) as sk:
                     action = winreg.EnumKey(sk, 0)
-                with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, rf"{shell_path}\{action}\command") as ck:
+                with winreg.OpenKey(
+                    winreg.HKEY_CLASSES_ROOT, rf"{shell_path}\{action}\command"
+                ) as ck:
                     cmd, _ = winreg.QueryValueEx(ck, "")
                 nuke_exe = cmd.split('"')[1]
             except Exception:
                 pass
         if nuke_exe:
+            # Temporary, remove after unlink tools from houdini
             nuke_dir = str(Path(nuke_exe).parent)
-            clean_vars = ("SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "TEMP", "TMP",
-                          "USERPROFILE", "APPDATA", "LOCALAPPDATA", "USERNAME",
-                          "COMPUTERNAME", "HOMEDRIVE", "HOMEPATH", "PUBLIC",
-                          "PROGRAMFILES", "PROGRAMFILES(X86)", "COMMONPROGRAMFILES")
+            clean_vars = (
+                "SYSTEMROOT",
+                "SYSTEMDRIVE",
+                "WINDIR",
+                "TEMP",
+                "TMP",
+                "USERPROFILE",
+                "APPDATA",
+                "LOCALAPPDATA",
+                "USERNAME",
+                "COMPUTERNAME",
+                "HOMEDRIVE",
+                "HOMEPATH",
+                "PUBLIC",
+                "PROGRAMFILES",
+                "PROGRAMFILES(X86)",
+                "COMMONPROGRAMFILES",
+            )
             env = {k: os.environ[k] for k in clean_vars if k in os.environ}
-            env["PATH"] = nuke_dir + os.pathsep + os.environ.get("SYSTEMROOT", "") + r"\system32"
+            env["PATH"] = (
+                nuke_dir + os.pathsep + os.environ.get("SYSTEMROOT", "") + r"\system32"
+            )
             subprocess.Popen(
                 [nuke_exe, "--nukex", path],
                 cwd=nuke_dir,

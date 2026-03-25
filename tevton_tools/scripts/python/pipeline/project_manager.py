@@ -195,7 +195,6 @@ class ProjectManager(QtWidgets.QMainWindow):
             QtWidgets.QPushButton, "pb_delete_file"
         )
         self.open_file_button = self.ui.findChild(QtWidgets.QPushButton, "pb_open_file")
-        self.open_file_button = self.ui.findChild(QtWidgets.QPushButton, "pb_open_file")
         self.filter_nk_check = self.ui.findChild(QtWidgets.QCheckBox, "cb_filter_nk")
         self.show_all_check = self.ui.findChild(QtWidgets.QCheckBox, "cb_show_all")
 
@@ -272,8 +271,8 @@ class ProjectManager(QtWidgets.QMainWindow):
         self.delete_file_button.clicked.connect(
             lambda: self.delete_object_by_type("file")
         )
-        self.open_file_button.clicked.connect(self.open_selected)
-        self.file_list.itemDoubleClicked.connect(lambda _: self.open_selected())
+        self.open_file_button.clicked.connect(lambda: self.open_selected())
+        self.file_list.itemDoubleClicked.connect(lambda: self.open_selected())
         self.filter_nk_check.stateChanged.connect(self.load_file_list)
         self.show_all_check.stateChanged.connect(self.load_file_list)
 
@@ -377,7 +376,7 @@ class ProjectManager(QtWidgets.QMainWindow):
         menu.addAction("Create File").triggered.connect(self.create_new_file)
         if item:
             menu.addSeparator()
-            menu.addAction("Open").triggered.connect(self.open_selected)
+            menu.addAction("Open").triggered.connect(lambda: self.open_selected())
             menu.addAction("New Session").triggered.connect(
                 lambda: self.open_selected("new_session")
             )
@@ -452,6 +451,7 @@ class ProjectManager(QtWidgets.QMainWindow):
             self.rename_file_btn.setEnabled(self.has_file_selected)
         self.delete_file_button.setEnabled(self.has_file_selected)
         self.open_file_button.setEnabled(self.has_file_selected)
+        self.filter_nk_check.setEnabled(self.has_shot_selected)
         self.show_all_check.setEnabled(self.has_shot_selected)
 
     # =====================================================
