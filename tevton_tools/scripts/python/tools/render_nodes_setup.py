@@ -4,7 +4,7 @@ from qt_shim import QtCore, QtGui, QtWidgets, QtUiTools
 
 class RenderNodesManager(QtWidgets.QMainWindow):
 
-    VERSION = "v1.0.0"
+    VERSION = "v1.0.1"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -57,9 +57,68 @@ class RenderNodesManager(QtWidgets.QMainWindow):
         self.btn_create.clicked.connect(self._on_create_clicked)
 
     def _msgbox(self, icon, title, text, buttons=QtWidgets.QMessageBox.Ok):
-        mb = QtWidgets.QMessageBox(icon, title, text, buttons, self)
-        mb.setFont(QtGui.QFont("Unispace", 8, QtGui.QFont.Bold))
-        return mb.exec()
+        font = QtGui.QFont("Unispace", 8, QtGui.QFont.Bold)
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle(title)
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(15)
+
+        icon_map = {
+            QtWidgets.QMessageBox.Warning: QtWidgets.QStyle.SP_MessageBoxWarning,
+            QtWidgets.QMessageBox.Critical: QtWidgets.QStyle.SP_MessageBoxCritical,
+            QtWidgets.QMessageBox.Question: QtWidgets.QStyle.SP_MessageBoxQuestion,
+            QtWidgets.QMessageBox.Information: QtWidgets.QStyle.SP_MessageBoxInformation,
+        }
+        icon_layout = QtWidgets.QHBoxLayout()
+        icon_layout.setSpacing(20)
+        if icon in icon_map:
+            icon_label = QtWidgets.QLabel()
+            icon_label.setPixmap(self.style().standardIcon(icon_map[icon]).pixmap(48, 48))
+            icon_layout.addWidget(icon_label)
+        msg_label = QtWidgets.QLabel(text)
+        msg_label.setFont(font)
+        msg_label.setWordWrap(True)
+        icon_layout.addWidget(msg_label, 1)
+        layout.addLayout(icon_layout)
+
+        line = QtWidgets.QFrame()
+        line.setFrameShape(QtWidgets.QFrame.HLine)
+        line.setFrameShadow(QtWidgets.QFrame.Sunken)
+        layout.addWidget(line)
+
+        btn_layout = QtWidgets.QHBoxLayout()
+        btn_layout.setSpacing(10)
+        btn_layout.addStretch()
+
+        result = [QtWidgets.QMessageBox.Cancel]
+
+        def _accept():
+            result[0] = QtWidgets.QMessageBox.Ok
+            dialog.accept()
+
+        if buttons & QtWidgets.QMessageBox.Ok:
+            ok_btn = QtWidgets.QPushButton("OK")
+            ok_btn.setFont(font)
+            ok_btn.setMinimumSize(70, 30)
+            ok_btn.clicked.connect(_accept)
+            btn_layout.addWidget(ok_btn)
+        if buttons & QtWidgets.QMessageBox.Cancel:
+            cancel_btn = QtWidgets.QPushButton("Cancel")
+            cancel_btn.setFont(font)
+            cancel_btn.setMinimumSize(70, 30)
+            cancel_btn.clicked.connect(dialog.reject)
+            btn_layout.addWidget(cancel_btn)
+
+        layout.addLayout(btn_layout)
+        dialog.setLayout(layout)
+        dialog.adjustSize()
+        sz = dialog.size()
+        dialog.setFixedSize(sz.width() + 20, sz.height())
+
+        dialog.exec()
+        return result[0]
 
     def _on_create_clicked(self):
         find_prefix, create_prefix = self._get_prefixes()
@@ -174,6 +233,9 @@ class RenderNodesManager(QtWidgets.QMainWindow):
         if self.chk_solaris.isChecked() and created_nodes:
             self._create_solaris_imports(created_nodes, create_prefix)
 
+        if created_nodes:
+            self.close()
+
     def _handle_render_nodes_selected(self, render_nodes, create_prefix):
         new_imports = []
         for rn in render_nodes:
@@ -201,6 +263,7 @@ class RenderNodesManager(QtWidgets.QMainWindow):
             return
 
         self._create_solaris_imports(new_imports, create_prefix)
+        self.close()
 
     def _create_render_node(self, source_null, render_name, ref_pos, offset):
         purple = hou.Color(0.451, 0.369, 0.796)
@@ -214,6 +277,7 @@ class RenderNodesManager(QtWidgets.QMainWindow):
         objmerge = geo.createNode("object_merge")
         objmerge.setColor(hou.Color(1, 0, 0))
         objmerge.parm("objpath1").set(source_null.path())
+        objmerge.parm("xformtype").set(1)
 
         null = geo.createNode("null")
         null.setColor(purple)

@@ -27,7 +27,7 @@ class FTPDownloadWorker(BaseTransferWorker):
     overwrite_needed = QtCore.Signal(list)  # list of conflicting filenames
     files_scanned = QtCore.Signal(list)  # list of (remote_file, local_dir, size)
     MAX_CONNECTIONS = 4
-    SPEED_WINDOW = 5.0  # seconds for rolling speed average
+    SPEED_WINDOW = 5.0
 
     def __init__(
         self, host, user, password, port, remote_paths, local_dir, use_tls=False
@@ -153,7 +153,7 @@ class FTPDownloadWorker(BaseTransferWorker):
                 t.join()
 
             if not self._is_running:
-                return  # Cancelled — manager already handled cleanup
+                return
 
             self.update_progress(100)
             if self._errors:
@@ -311,7 +311,6 @@ class FTPDownloadWorker(BaseTransferWorker):
         Size is taken from MLSD attrs when available, otherwise 0.
         """
         try:
-            # ftp.size() succeeds only for files, raises for directories.
             size = ftp.size(remote_path) or 0
             entries.append((remote_path, local_base, size))
             return

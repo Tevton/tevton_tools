@@ -160,9 +160,7 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         self.log_text.setMaximumBlockCount(self.MAX_LOG_LINES)
         self.log_text.setReadOnly(True)
         self.log_text.document().setDocumentMargin(2)
-        self.con_status.setAlignment(
-            QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
-        )
+        self.con_status.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         for lbl in (
             self.ftp_text,
             self.local_text,
@@ -174,15 +172,9 @@ class ShotFTPManager(QtWidgets.QMainWindow):
         ):
             lbl.setAlignment(QtCore.Qt.AlignCenter)
 
-        self.speed_status.setAlignment(
-            QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
-        )
-        self.total_status.setAlignment(
-            QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
-        )
-        self.eta_status.setAlignment(
-            QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
-        )
+        self.speed_status.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.total_status.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.eta_status.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         tvt_utils.set_connection_status(self, "disconnected")
         self.delshortcut = QtGui.QShortcut(QtGui.QKeySequence("Delete"), self)
         self.delshortcut.activated.connect(self._delete_selected)

@@ -67,7 +67,7 @@ class FTPDeleteWorker(BaseFTPWorker):
             # Phase 2 — split into files (parallelisable) and dirs (serial).
             self.log(f"Deleting {len(all_items)} item(s)...", "info")
             files = [p for p, is_dir in all_items if not is_dir]
-            dirs  = [p for p, is_dir in all_items if is_dir]
+            dirs = [p for p, is_dir in all_items if is_dir]
 
             total = len(all_items)
             self._deleted = 0
@@ -99,8 +99,11 @@ class FTPDeleteWorker(BaseFTPWorker):
                                 self._file_progress[remote_path] = 100
                         except Exception as e:
                             err = str(e).lower()
-                            if "no such file" in err or "no such file or directory" in err:
-                                pass  # already gone — count as done
+                            if (
+                                "no such file" in err
+                                or "no such file or directory" in err
+                            ):
+                                pass
                             else:
                                 name = remote_path.rstrip("/").split("/")[-1]
                                 self.log(f"Failed to delete {name}: {e}", "warning")
@@ -124,7 +127,9 @@ class FTPDeleteWorker(BaseFTPWorker):
 
             n_threads = min(self.MAX_CONNECTIONS, len(files)) if files else 0
             threads = [
-                threading.Thread(target=_delete_loop, daemon=True, name=f"DeleteThread-{i}")
+                threading.Thread(
+                    target=_delete_loop, daemon=True, name=f"DeleteThread-{i}"
+                )
                 for i in range(n_threads)
             ]
             for t in threads:
@@ -245,5 +250,8 @@ class FTPDeleteWorker(BaseFTPWorker):
             ftp.rmd(remote_path)
             return True
         except Exception as e:
-            self.log(f"Failed to remove directory {remote_path.split('/')[-1]}: {e}", "warning")
+            self.log(
+                f"Failed to remove directory {remote_path.split('/')[-1]}: {e}",
+                "warning",
+            )
             return False

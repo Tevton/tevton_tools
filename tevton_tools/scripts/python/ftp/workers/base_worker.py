@@ -13,7 +13,6 @@ class BaseFTPWorker(QtCore.QThread):
     is the manager's responsibility.
     """
 
-    # Transfer buffer size. 1MB gives best throughput on high-bandwidth connections.
     CHUNK_SIZE = 1024 * 1024
 
     progress = QtCore.Signal(int)
@@ -161,7 +160,7 @@ class BaseFTPWorker(QtCore.QThread):
         try:
             result = []
             for name, attrs in ftp.mlsd(path):
-                name = name.rstrip("/").split("/")[-1]  # normalize to basename
+                name = name.rstrip("/").split("/")[-1]
                 if name in (".", "..") or not name:
                     continue
                 result.append((name, "dir" in attrs.get("type", "").lower()))
@@ -175,7 +174,7 @@ class BaseFTPWorker(QtCore.QThread):
                 if len(parts) < 9:
                     continue
                 name = " ".join(parts[8:])
-                name = name.rstrip("/").split("/")[-1]  # normalize to basename
+                name = name.rstrip("/").split("/")[-1]
                 if name not in (".", "..") and name:
                     result.append((name, parts[0].startswith("d")))
             return result

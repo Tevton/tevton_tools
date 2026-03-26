@@ -377,7 +377,7 @@ class TransferPanel:
             self._collect_add_files() if win.renders_app_add_files.isChecked() else []
         )
         if add_paths is None:
-            return  # user aborted
+            return
 
         if mode in (0, 1):
             self._block_for_transfer()
@@ -790,7 +790,6 @@ class TransferPanel:
             self._queue_remove(op_id)
             self._active_op_id = ""
             if success:
-                # message is e.g. "Downloaded 9 files" — reformat to match upload style.
                 count = message.split()[1] if message else ""
                 self._win.log(f"Download completed: {count} files", "success")
             else:

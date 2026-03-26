@@ -1,4 +1,3 @@
-import hou
 from pathlib import Path
 from qt_shim import QtCore, QtGui, QtWidgets
 from config.config import FTP_SHOT_PATH, USER_DATA_PATH
@@ -26,10 +25,12 @@ class FTPPanel:
         self._icon_provider = QtWidgets.QFileIconProvider()
         self._icon_memory: dict = {}
         self._icon_dir = self._load_or_fetch_icon(
-            "__dir__", lambda: self._icon_provider.icon(QtWidgets.QFileIconProvider.Folder)
+            "__dir__",
+            lambda: self._icon_provider.icon(QtWidgets.QFileIconProvider.Folder),
         )
         self._icon_file = self._load_or_fetch_icon(
-            "__file__", lambda: self._icon_provider.icon(QtWidgets.QFileIconProvider.File)
+            "__file__",
+            lambda: self._icon_provider.icon(QtWidgets.QFileIconProvider.File),
         )
         self._setup_header_sort()
 
@@ -76,7 +77,10 @@ class FTPPanel:
             return self._icon_memory[ext]
         key = ext if ext else "__noext__"
         icon = self._load_or_fetch_icon(
-            key, lambda: self._icon_provider.icon(QtCore.QFileInfo(f"dummy.{ext}" if ext else "dummy"))
+            key,
+            lambda: self._icon_provider.icon(
+                QtCore.QFileInfo(f"dummy.{ext}" if ext else "dummy")
+            ),
         )
         if icon.isNull():
             icon = self._icon_file
@@ -96,7 +100,11 @@ class FTPPanel:
         header.sectionClicked.connect(self._on_header_clicked)
 
     def _restore_sort_indicator(self):
-        order = QtCore.Qt.AscendingOrder if self._sort_ascending else QtCore.Qt.DescendingOrder
+        order = (
+            QtCore.Qt.AscendingOrder
+            if self._sort_ascending
+            else QtCore.Qt.DescendingOrder
+        )
         self._win.ftp_tree.header().setSortIndicator(self._sort_column, order)
 
     def _on_header_clicked(self, col: int):
@@ -167,19 +175,16 @@ class FTPPanel:
         tree.clear()
         self.clear_selection()
 
-        # Handle empty folder
         if not files_info:
             placeholder = QtWidgets.QTreeWidgetItem()
             placeholder.setText(0, "(empty folder)")
             placeholder.setFlags(QtCore.Qt.NoItemFlags)
             tree.addTopLevelItem(placeholder)
         else:
-            # Separate folders and files with better type checking
             folders = []
             files = []
 
             for f in files_info:
-                # Handle both boolean and string representations
                 is_dir = f.get("is_dir", False)
                 if isinstance(is_dir, str):
                     is_dir = is_dir.lower() == "true"
@@ -189,25 +194,22 @@ class FTPPanel:
                 else:
                     files.append(f)
 
-            # Sort using current sort state
             col = self._sort_column
             reverse = not self._sort_ascending
             col_keys = {0: "name", 1: "size_str", 2: "modify_str"}
             key_field = col_keys.get(col, "name")
 
-            # Sort folders
             folders.sort(
                 key=lambda f: str(f.get(key_field, "")).lower(),
                 reverse=reverse,
             )
 
-            # Sort files
             files.sort(
                 key=lambda f: str(f.get(key_field, "")).lower(),
                 reverse=reverse,
             )
 
-            # Combine: folders first, then files
+            # Folders first, then files
             sorted_info = folders + files
 
             items = []
@@ -218,14 +220,12 @@ class FTPPanel:
                 item.setText(2, file_info.get("modify_str", ""))
                 item.setData(0, QtCore.Qt.UserRole, file_info)
 
-                # Check if it's a directory
                 is_dir = file_info.get("is_dir", False)
                 if isinstance(is_dir, str):
                     is_dir = is_dir.lower() == "true"
 
                 if is_dir:
                     item.setIcon(0, self._icon_dir)
-                    # Make folders bold
                     font = item.font(0)
                     font.setBold(True)
                     item.setFont(0, font)
@@ -381,7 +381,7 @@ class FTPPanel:
                 icon=QtWidgets.QMessageBox.Warning,
             )
         except RuntimeError:
-            return  # window closed before deferred dialog could open
+            return
 
         if not result:
             return

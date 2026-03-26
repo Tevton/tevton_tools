@@ -12,4 +12,4 @@ FTP_SHOT_PATH = "/OUT/FX/{shot_name}"
 FTP_SOURCE_PATH = "IN/{shot_name}"
 HIP_EXTENSIONS = [".hip", ".hipnc", ".hiplc"]
 
-VERSION = "v0.3.1"
+VERSION = "v0.3.2"

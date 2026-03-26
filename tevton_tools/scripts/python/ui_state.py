@@ -54,7 +54,6 @@ class UIStateController:
                 try:
                     self._widgets[name].setEnabled(enabled)
                 except RuntimeError:
-                    # Widget was deleted, remove from registry
                     del self._widgets[name]
 
     def enable_group(self, group: str):
@@ -88,7 +87,6 @@ class UIStateController:
                 try:
                     self._saved_states[block_id][name] = self._widgets[name].isEnabled()
                 except RuntimeError:
-                    # Widget was deleted
                     continue
 
         # Disable all
@@ -165,7 +163,6 @@ class UIStateController:
 
     def clear(self):
         """Clear all resources."""
-        # Stop all timers
         for timer in self._timers:
             timer.stop()
         self._timers.clear()
