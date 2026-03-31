@@ -36,14 +36,16 @@ A Houdini pipeline package for project, shot, and .hip file management with inte
            └── ui/
    ```
 
-4. **Restart Houdini.** The **Tevton Tools** shelf will appear automatically.
+4. **Restart Houdini** and click + near any shelf set and select **Tevton Tools** in dropdown menu.
 
 ---
 
 ## Tools
 
 ### Project Manager
-A hierarchical browser for managing your pipeline data. Organizes everything into three levels — **Projects → Shots → Files** — letting you create, edit, and open .hip files directly from the UI. Also provides quick access to the Shot FTP Manager for each shot.
+A hierarchical browser for managing your pipeline data. Organizes everything into three levels — **Projects → Shots → Files** — letting you create, edit, and open .hip files directly from the UI. Also provides quick access to the FTP Manager for each shot.
+
+**FTP Manager** renders file stucture should be **Render → Render Name → Render Version → Files**
 
 ### Shot FTP Manager
 A dual-panel file transfer window (FTP remote on the left, local filesystem on the right). Supports drag-and-drop uploads and downloads, inline rename (F2), delete (Del), folder creation, and real-time transfer progress. Opened per-shot from the Project Manager.
