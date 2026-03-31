@@ -45,10 +45,10 @@ A Houdini pipeline package for project, shot, and .hip file management with inte
 ### Project Manager
 A hierarchical browser for managing your pipeline data. Organizes everything into three levels — **Projects → Shots → Files** — letting you create, edit, and open .hip files directly from the UI. Also provides quick access to the FTP Manager for each shot.
 
-**FTP Manager** renders file stucture should be **Render → Render Name → Render Version → Files**
-
 ### Shot FTP Manager
-A dual-panel file transfer window (FTP remote on the left, local filesystem on the right). Supports drag-and-drop uploads and downloads, inline rename (F2), delete (Del), folder creation, and real-time transfer progress. Opened per-shot from the Project Manager.
+A dual-panel file transfer window (FTP remote on the right, local filesystem on the left). Supports drag-and-drop uploads and downloads, inline rename (F2), delete (Del), folder creation, and real-time transfer progress. Opened per-shot from the Project Manager.
+
+**FTP Manager** renders file stucture should be **Render → Render Name → Render Version → Files**
 
 ### Increment Save
 Saves the current .hip file with an automatically incremented version number (e.g. `scene_v001.hip` → `scene_v002.hip`).
