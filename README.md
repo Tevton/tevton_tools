@@ -48,7 +48,7 @@ A hierarchical browser for managing your pipeline data. Organizes everything int
 ### Shot FTP Manager
 A dual-panel file transfer window (FTP remote on the right, local filesystem on the left). Supports drag-and-drop uploads and downloads, inline rename (F2), delete (Del), folder creation, and real-time transfer progress. Opened per-shot from the Project Manager.
 
-**FTP Manager** renders file stucture should be **Render → Render Name → Render Version → Files**
+**FTP Manager** renders file structure should be **Render → Render Name → Render Version → Files**
 
 ### Increment Save
 Saves the current .hip file with an automatically incremented version number (e.g. `scene_v001.hip` → `scene_v002.hip`).
