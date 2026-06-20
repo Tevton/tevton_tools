@@ -167,8 +167,7 @@ class TransferPanel:
 
     @staticmethod
     def _set_cancel_btn_stylesheet(widget):
-        widget.setStyleSheet(
-            """
+        widget.setStyleSheet("""
         QPushButton {
             background-color: #593131;
             color: #e0e0e0;
@@ -188,8 +187,7 @@ class TransferPanel:
             border-top-width: 3px;
             border-bottom-width: 1px;
         }
-        """
-        )
+        """)
 
     # ──────────────────────────────────────────────────────────────────────
     # HIGH-LEVEL TRANSFER OPERATIONS
@@ -510,8 +508,7 @@ class TransferPanel:
                     self._wm.show_buttons_dialog(
                         win,
                         "Error",
-                        f"Remote source folder does not exist:\n\n{win.current_ftp_source_path}\n\n"
-                        f"Please ask Svetlana about source files for {win.shot_name}.",
+                        f"Remote source folder does not exist:\n\n{win.current_ftp_source_path}\n\n",
                         icon=QtWidgets.QMessageBox.Critical,
                     )
                 win.log(
@@ -732,15 +729,20 @@ class TransferPanel:
         def _pick_best(files):
             v_files = [p for p in files if _re.search(r"v\d+$", p.stem, _re.IGNORECASE)]
             pool = v_files if v_files else files
-            return max(pool, key=lambda p: tvt_utils.extract_trailing_version(p.stem))
+
+            max_ver = max(tvt_utils.extract_trailing_version(p.stem) for p in pool)
+
+            return [
+                p for p in pool if tvt_utils.extract_trailing_version(p.stem) == max_ver
+            ]
 
         nk_files = [p for p in candidates if p.suffix.lower() == ".nk"]
         mov_files = [p for p in candidates if p.suffix.lower() == ".mov"]
         latest = []
         if nk_files:
-            latest.append(_pick_best(nk_files))
+            latest.extend(_pick_best(nk_files))
         if mov_files:
-            latest.append(_pick_best(mov_files))
+            latest.extend(_pick_best(mov_files))
 
         if not latest:
             proceed = self._wm.show_buttons_dialog(
